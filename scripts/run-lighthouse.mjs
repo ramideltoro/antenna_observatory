@@ -26,10 +26,10 @@ await mkdir(outputDirectory, { recursive: true });
 const chrome = await chromeLauncher.launch({
   chromeFlags: ['--headless', '--no-sandbox', '--disable-dev-shm-usage'],
 });
-const failures = [];
+const observations = [];
 
 try {
-  for (let run = 1; run <= 2; run += 1) {
+  for (let run = 1; run <= 3; run += 1) {
     const result = await lighthouse(url, {
       extraHeaders: { Cookie: cookie },
       logLevel: 'warn',
@@ -62,27 +62,57 @@ try {
         `best-practices=${scores['best-practices'].toFixed(2)} ` +
         `LCP=${Math.round(largestContentfulPaint)}ms CLS=${cumulativeLayoutShift.toFixed(3)}`,
     );
-
-    for (const [category, minimum] of Object.entries(thresholds)) {
-      if (scores[category] < minimum) {
-        failures.push(
-          `${category} ${scores[category].toFixed(2)} is below ${minimum.toFixed(2)}`,
-        );
-      }
-    }
-    if (largestContentfulPaint > 3000) {
-      failures.push(
-        `largest-contentful-paint ${Math.round(largestContentfulPaint)}ms exceeds 3000ms`,
-      );
-    }
-    if (cumulativeLayoutShift > 0.1) {
-      failures.push(
-        `cumulative-layout-shift ${cumulativeLayoutShift.toFixed(3)} exceeds 0.100`,
-      );
-    }
+    observations.push({
+      cumulativeLayoutShift,
+      largestContentfulPaint,
+      scores,
+    });
   }
 } finally {
   chrome.kill();
+}
+
+const median = (values) => [...values].sort((left, right) => left - right)[1];
+const representative = {
+  cumulativeLayoutShift: median(
+    observations.map(({ cumulativeLayoutShift }) => cumulativeLayoutShift),
+  ),
+  largestContentfulPaint: median(
+    observations.map(({ largestContentfulPaint }) => largestContentfulPaint),
+  ),
+  scores: Object.fromEntries(
+    Object.keys(thresholds).map((category) => [
+      category,
+      median(observations.map(({ scores }) => scores[category])),
+    ]),
+  ),
+};
+const failures = [];
+
+console.log(
+  `Median: performance=${representative.scores.performance.toFixed(2)} ` +
+    `accessibility=${representative.scores.accessibility.toFixed(2)} ` +
+    `best-practices=${representative.scores['best-practices'].toFixed(2)} ` +
+    `LCP=${Math.round(representative.largestContentfulPaint)}ms ` +
+    `CLS=${representative.cumulativeLayoutShift.toFixed(3)}`,
+);
+
+for (const [category, minimum] of Object.entries(thresholds)) {
+  if (representative.scores[category] < minimum) {
+    failures.push(
+      `${category} ${representative.scores[category].toFixed(2)} is below ${minimum.toFixed(2)}`,
+    );
+  }
+}
+if (representative.largestContentfulPaint > 3000) {
+  failures.push(
+    `largest-contentful-paint ${Math.round(representative.largestContentfulPaint)}ms exceeds 3000ms`,
+  );
+}
+if (representative.cumulativeLayoutShift > 0.1) {
+  failures.push(
+    `cumulative-layout-shift ${representative.cumulativeLayoutShift.toFixed(3)} exceeds 0.100`,
+  );
 }
 
 if (failures.length) {
