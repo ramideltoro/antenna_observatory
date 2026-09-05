@@ -1,6 +1,6 @@
 # Antenna Observatory documentation
 
-This repository is generated from the canonical documentation in the [Antenna Observatory source repository](https://github.com/ramideltoro/antenna_observatory/tree/main/wiki-site). Changes merged into the application’s `main` branch are tested, deployed, and then synchronized here automatically.
+This shared site publishes the Antenna Observatory documentation from the [Antenna Observatory source repository](https://github.com/ramideltoro/antenna_observatory/tree/main/wiki-site) and the Skyglow section from the [Skyglow source repository](https://github.com/ramideltoro/skyglow/tree/main/wiki/skyglow). Each application synchronizes its canonical pages and release record only after a successful production deployment.
 
 The published documentation is available at <https://docs.ramideltoro.com>.
 

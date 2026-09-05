@@ -98,7 +98,7 @@ jobs:
           GIT_SSH_COMMAND: ssh -i ~/.ssh/wiki_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes
         run: |
           git clone git@github.com:ramideltoro/antenna_observatory_wiki.git wiki-release
-          rsync -a --delete --exclude .git/ wiki-site/ wiki-release/
+          rsync -a --delete --exclude .git/ --exclude docs/skyglow/ wiki-site/ wiki-release/
           python wiki-site/scripts/render-release-notes.py \
             --repository-root . \
             --output wiki-release/docs/project/release-notes.md \

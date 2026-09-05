@@ -6,6 +6,7 @@ Antenna Observatory turns a Nooelec software-defined radio attached to a Mac int
 
 [Open the dashboard](https://antenna.ramideltoro.com){ .md-button .md-button--primary }
 [Browse the source](https://github.com/ramideltoro/antenna_observatory){ .md-button }
+[Open Skyglow](https://skyglow.ramideltoro.com){ .md-button }
 
 ```mermaid
 flowchart LR
@@ -56,6 +57,26 @@ flowchart LR
   [:octicons-arrow-right-24: Operations runbook](operations.md)
 
 </div>
+
+## Skyglow: every wavelength
+
+Skyglow extends the same local receiver into a private multi-band observatory for live aircraft, flight replay, airband and NOAA audio, Meteor satellite captures, and compatible wireless sensors. It keeps the physical SDR and private data on the Mac while a ServerCheap edge makes the iPhone interface reliable and fast.
+
+```mermaid
+flowchart LR
+    A[One USB receiver] --> B{Timed mode}
+    B --> C[1090 MHz aircraft]
+    B --> D[Airband / NOAA audio]
+    B --> E[Meteor LRPT]
+    B --> F[rtl_433 sensors]
+    C --> G[Skyglow iPhone interface]
+    D --> G
+    E --> G
+    F --> G
+```
+
+[Read the Skyglow wiki](skyglow/index.md){ .md-button .md-button--primary }
+[Browse Skyglow source](https://github.com/ramideltoro/skyglow){ .md-button }
 
 ## Design goals
 
