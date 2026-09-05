@@ -41,7 +41,8 @@ jobs:
           args: >-
             --no-progress
             --exclude '^https://antenna\.ramideltoro\.com'
-            --exclude '^https://docs\.antenna\.ramideltoro\.com'
+            --exclude '^https://wiki\.antenna\.ramideltoro\.com'
+            --exclude '^https://wiki\.skyglow\.ramideltoro\.com'
             './docs/**/*.md'
           fail: true
 
