@@ -1,0 +1,172 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PNPM_VERSION: 10.17.1
+
+jobs:
+  quality:
+    name: Quality and reliability
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pnpm
+        run: npm install --global "pnpm@$PNPM_VERSION"
+
+      - name: Install exact dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate public source boundary
+        run: python scripts/check-public-source.py
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Type-check
+        run: pnpm typecheck
+
+      - name: Test backend
+        run: pnpm test
+
+      - name: Validate shell entry points
+        run: sh -n ops/start-servercheap.sh ops/deploy-release.sh
+
+      - name: Build production dashboard
+        run: pnpm build
+
+      - name: Enforce bundle budgets
+        run: pnpm check:size
+
+      - name: Package release
+        run: tar -czf release.tgz dist/client server ops/servercheap-supervisor.py ops/start-servercheap.sh
+
+      - name: Upload tested release
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: antenna-observatory-release
+          path: release.tgz
+          if-no-files-found: error
+          retention-days: 14
+
+  security:
+    name: Security audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out complete history
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan commits for secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      - name: Install pnpm
+        run: npm install --global "pnpm@$PNPM_VERSION"
+
+      - name: Audit production dependencies
+        run: pnpm audit --prod --audit-level high
+
+  performance:
+    name: Mobile performance and accessibility
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pnpm and dependencies
+        run: |
+          npm install --global "pnpm@$PNPM_VERSION"
+          pnpm install --frozen-lockfile
+
+      - name: Download tested release
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: antenna-observatory-release
+
+      - name: Start an authenticated test dashboard
+        run: |
+          tar -xzf release.tgz
+          export ANTENNA_STATE_DIR="$RUNNER_TEMP/antenna-state"
+          mkdir -p "$ANTENNA_STATE_DIR"
+          printf '%s\n' 'ci-only-password' | python ops/set-account.py ci --password-stdin
+          printf '%064d\n' 0 > "$ANTENNA_STATE_DIR/relay-token"
+          python server/observatory.py --relay --port 8787 > "$RUNNER_TEMP/observatory.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/observatory.pid"
+          for attempt in {1..30}; do
+            curl --fail --silent http://127.0.0.1:8787/login >/dev/null && exit 0
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/observatory.log"
+          exit 1
+
+      - name: Establish test session
+        run: |
+          curl --silent --show-error --cookie-jar "$RUNNER_TEMP/cookies" \
+            --header 'Content-Type: application/x-www-form-urlencoded' \
+            --data 'username=ci&password=ci-only-password' \
+            http://127.0.0.1:8787/auth/login >/dev/null
+          cookie="$(awk '$6 == "antenna_local_session" { print $6 "=" $7 }' "$RUNNER_TEMP/cookies")"
+          test -n "$cookie"
+          echo "::add-mask::$cookie"
+          echo "LHCI_COOKIE=$cookie" >> "$GITHUB_ENV"
+
+      - name: Run mobile Lighthouse budgets
+        run: pnpm exec lhci autorun
+
+      - name: Upload Lighthouse reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: lighthouse-reports
+          path: .lighthouseci
+          if-no-files-found: ignore
+          retention-days: 14

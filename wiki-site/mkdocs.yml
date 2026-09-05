@@ -1,0 +1,110 @@
+site_name: Antenna Observatory
+site_description: Architecture, setup, operations, and signal reference for the Antenna Observatory
+site_url: https://docs.antenna.ramideltoro.com
+repo_url: https://github.com/ramideltoro/antenna_observatory
+repo_name: ramideltoro/antenna_observatory
+edit_uri: edit/main/wiki-site/docs/
+copyright: Built for the Antenna Observatory · Documentation is versioned with the application
+
+theme:
+  name: material
+  language: en
+  logo: assets/logo.svg
+  favicon: assets/logo.svg
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - media: '(prefers-color-scheme: dark)'
+      scheme: slate
+      primary: amber
+      accent: amber
+      toggle:
+        icon: material/weather-sunny
+        name: Use light mode
+    - media: '(prefers-color-scheme: light)'
+      scheme: observatory-light
+      primary: amber
+      accent: amber
+      toggle:
+        icon: material/weather-night
+        name: Use dark mode
+  features:
+    - navigation.instant
+    - navigation.instant.progress
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.highlight
+    - search.share
+    - content.action.edit
+    - content.code.copy
+    - content.code.annotate
+
+nav:
+  - Home: index.md
+  - Start here:
+      - Access and use: getting-started.md
+      - Mac receiver setup: mac-setup.md
+      - Signal guide: signals.md
+  - System:
+      - Architecture: architecture.md
+      - Data pipeline: data-pipeline.md
+      - Dashboard: dashboard.md
+      - API reference: api.md
+      - Security: security.md
+  - Operations:
+      - Runbook: operations.md
+      - Troubleshooting: troubleshooting.md
+      - Deployment and CI/CD: deployment.md
+  - Project:
+      - Development: development.md
+      - Design decisions: decisions.md
+      - Release notes: project/release-notes.md
+      - Glossary: glossary.md
+
+plugins:
+  - search
+  - minify:
+      minify_html: true
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - footnotes
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+extra_css:
+  - stylesheets/extra.css
+extra_javascript:
+  - https://unpkg.com/mermaid@11.17.2/dist/mermaid.min.js
+  - javascripts/mermaid.js
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/ramideltoro/antenna_observatory
+      name: Antenna Observatory source
+    - icon: material/radar
+      link: https://antenna.ramideltoro.com
+      name: Live dashboard

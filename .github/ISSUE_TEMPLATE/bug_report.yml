@@ -1,0 +1,39 @@
+name: Bug report
+description: Report a reproducible dashboard, receiver, deployment, or documentation problem
+title: 'bug: '
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include passwords, tokens, receiver UUIDs, station coordinates, or private logs.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: List the shortest safe steps that reproduce the problem.
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Dashboard
+        - Mac receiver or collector
+        - Remote relay or tunnel
+        - CI/CD
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized evidence
+      description: Add browser, operating-system, and redacted log details.

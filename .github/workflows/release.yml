@@ -1,0 +1,115 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: production-release
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy production
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment:
+      name: production
+      url: https://antenna.ramideltoro.com
+    steps:
+      - name: Check out the verified commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Download the tested release
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: antenna-observatory-release
+          path: package
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Configure restricted deployment SSH
+        env:
+          DEPLOY_KEY: ${{ secrets.VPS_DEPLOY_KEY }}
+          HOST_KEY: ${{ secrets.VPS_HOST_KEY }}
+        run: |
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_KEY" > "$HOME/.ssh/antenna_deploy"
+          printf '%s\n' "$HOST_KEY" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/antenna_deploy" "$HOME/.ssh/known_hosts"
+
+      - name: Upload and activate atomic release
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          ssh_args="-i $HOME/.ssh/antenna_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+          ssh $ssh_args "$VPS_USER@$VPS_HOST" 'mkdir -p "$HOME/antenna-observatory/incoming"'
+          scp $ssh_args package/release.tgz ops/deploy-release.sh \
+            "$VPS_USER@$VPS_HOST:~/antenna-observatory/incoming/"
+          ssh $ssh_args "$VPS_USER@$VPS_HOST" \
+            "sh \"\$HOME/antenna-observatory/incoming/deploy-release.sh\" '$RELEASE_SHA' \"\$HOME/antenna-observatory/incoming/release.tgz\""
+
+      - name: Verify public authentication boundary
+        run: |
+          curl --fail --silent --show-error --retry 8 --retry-delay 2 \
+            https://antenna.ramideltoro.com/login >/dev/null
+          status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            https://antenna.ramideltoro.com/api/health)"
+          test "$status" = 401
+
+  sync-wiki:
+    name: Publish project documentation
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out released source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 30
+
+      - name: Configure wiki deploy key
+        env:
+          WIKI_DEPLOY_KEY: ${{ secrets.WIKI_DEPLOY_KEY }}
+        run: |
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$WIKI_DEPLOY_KEY" > "$HOME/.ssh/wiki_deploy"
+          chmod 600 "$HOME/.ssh/wiki_deploy"
+          printf '%s\n' 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' >> "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Synchronize canonical documentation
+        env:
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+          GIT_SSH_COMMAND: ssh -i ~/.ssh/wiki_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes
+        run: |
+          git clone git@github.com:ramideltoro/antenna_observatory_wiki.git wiki-release
+          rsync -a --delete --exclude .git/ wiki-site/ wiki-release/
+          python wiki-site/scripts/render-release-notes.py \
+            --repository-root . \
+            --output wiki-release/docs/project/release-notes.md \
+            --commit "$RELEASE_SHA"
+          cd wiki-release
+          git config user.name 'antenna-observatory[bot]'
+          git config user.email 'antenna-observatory[bot]@users.noreply.github.com'
+          git add --all
+          if git diff --cached --quiet; then
+            echo 'Documentation is already current.'
+            exit 0
+          fi
+          git commit -m "docs: publish $RELEASE_SHA"
+          git push origin main

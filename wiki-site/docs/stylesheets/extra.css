@@ -1,0 +1,97 @@
+:root {
+  --md-primary-fg-color: #d99325;
+  --md-primary-fg-color--light: #ffbf4b;
+  --md-primary-fg-color--dark: #9b6212;
+  --md-accent-fg-color: #ffb833;
+}
+
+[data-md-color-scheme='slate'] {
+  --md-default-bg-color: #15120e;
+  --md-default-bg-color--light: #1b1711;
+  --md-default-fg-color: #f2eadb;
+  --md-default-fg-color--light: #cfc2aa;
+  --md-code-bg-color: #211b13;
+  --md-typeset-a-color: #f3b646;
+}
+
+[data-md-color-scheme='observatory-light'] {
+  --md-default-bg-color: #fffaf1;
+  --md-default-fg-color: #2f2415;
+  --md-code-bg-color: #f7ecd8;
+  --md-typeset-a-color: #9b5d00;
+}
+
+.md-header,
+.md-tabs {
+  background: linear-gradient(115deg, #17130e, #352411);
+}
+
+.md-typeset h1 {
+  color: var(--md-default-fg-color);
+  font-weight: 760;
+  letter-spacing: -0.035em;
+}
+
+.md-typeset h2 {
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--md-primary-fg-color) 35%, transparent);
+  padding-bottom: 0.35rem;
+}
+
+.md-typeset .grid.cards > ul > li,
+.md-typeset .admonition,
+.md-typeset details {
+  border-color: color-mix(in srgb, var(--md-primary-fg-color) 48%, transparent);
+  box-shadow: 0 12px 34px rgb(0 0 0 / 12%);
+}
+
+.md-typeset .grid.cards > ul > li:hover {
+  border-color: var(--md-primary-fg-color);
+  transform: translateY(-2px);
+  transition: 160ms ease;
+}
+
+.mermaid {
+  overflow-x: auto;
+  padding: 1rem;
+  border: 1px solid
+    color-mix(in srgb, var(--md-primary-fg-color) 35%, transparent);
+  border-radius: 0.7rem;
+  background: #15120e;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid #9b6b25;
+  border-radius: 999px;
+  color: #ffd58c;
+  background: #362711;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 600px) {
+  .md-typeset h1 {
+    font-size: 1.9rem;
+  }
+  .md-typeset table:not([class]) {
+    font-size: 0.72rem;
+  }
+  .mermaid {
+    padding: 0.45rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
