@@ -62,13 +62,12 @@ jobs:
           ssh $ssh_args "$VPS_USER@$VPS_HOST" \
             "sh \"\$HOME/antenna-observatory/incoming/deploy-release.sh\" '$RELEASE_SHA' \"\$HOME/antenna-observatory/incoming/release.tgz\""
 
-      - name: Verify public authentication boundary
+      - name: Verify public dashboard and health API
         run: |
           curl --fail --silent --show-error --retry 8 --retry-delay 2 \
-            https://antenna.ramideltoro.com/login >/dev/null
-          status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
-            https://antenna.ramideltoro.com/api/health)"
-          test "$status" = 401
+            https://antenna.ramideltoro.com/ | grep -q '<title>Antenna Observatory</title>'
+          curl --fail --silent --show-error --retry 8 --retry-delay 2 \
+            https://antenna.ramideltoro.com/api/health | python3 -c 'import json,sys; assert json.load(sys.stdin)["service"] == "antenna-observatory"'
 
   sync-wiki:
     name: Publish project documentation
@@ -98,7 +97,7 @@ jobs:
           GIT_SSH_COMMAND: ssh -i ~/.ssh/wiki_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes
         run: |
           git clone git@github.com:ramideltoro/antenna_observatory_wiki.git wiki-release
-          rsync -a --delete --exclude .git/ --exclude docs/skyglow/ wiki-site/ wiki-release/
+          rsync -a --delete --exclude .git/ wiki-site/ wiki-release/
           python wiki-site/scripts/render-release-notes.py \
             --repository-root . \
             --output wiki-release/docs/project/release-notes.md \

@@ -26,8 +26,8 @@ sequenceDiagram
       Relay->>Relay: Validate, sanitize, and persist
     end
     loop Every two seconds
-      Browser->>Relay: GET /api/snapshot with session cookie
-      Relay-->>Browser: Latest protected telemetry
+      Browser->>Relay: Public GET /api/snapshot
+      Relay-->>Browser: Latest telemetry
     end
 ```
 

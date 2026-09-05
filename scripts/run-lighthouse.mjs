@@ -4,15 +4,8 @@ import path from 'node:path';
 import * as chromeLauncher from 'chrome-launcher';
 import lighthouse from 'lighthouse';
 
-const cookie = process.env.LHCI_COOKIE;
 const url = process.env.LHCI_URL || 'http://127.0.0.1:8787/';
 const outputDirectory = path.resolve('.lighthouseci');
-
-if (!cookie) {
-  throw new Error(
-    'LHCI_COOKIE is required so Lighthouse audits the authenticated dashboard.',
-  );
-}
 
 const thresholds = {
   accessibility: 0.95,
@@ -31,7 +24,6 @@ const observations = [];
 try {
   for (let run = 1; run <= 3; run += 1) {
     const result = await lighthouse(url, {
-      extraHeaders: { Cookie: cookie },
       logLevel: 'warn',
       onlyCategories: Object.keys(thresholds),
       output: 'json',

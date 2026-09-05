@@ -53,7 +53,7 @@ Use the same command with another label for the collector, uploader, or keep-awa
 
 ## Deployments and rollback
 
-Production releases are immutable directories named by the full Git commit. The `current` symlink changes atomically after extraction and validation. The deployment script restarts only the relay, checks its loopback login page, and restores the previous symlink if health does not recover.
+Production releases are immutable directories named by the full Git commit. The `current` symlink changes atomically after extraction and validation. The deployment script restarts only the relay, checks its loopback dashboard, and restores the previous symlink if health does not recover.
 
 The five newest releases are retained. To inspect the active target:
 
@@ -65,7 +65,6 @@ ssh antenna-observatory 'readlink "$HOME/antenna-observatory/current"'
 
 Back up the remote state directory separately from releases. It contains:
 
-- the account hash record;
 - relay and tunnel token files;
 - the SQLite history database and WAL files;
 - latest accepted relay snapshot and bounded log tail;

@@ -42,7 +42,6 @@ import {
   AlertTriangle,
   ExternalLink,
   Menu,
-  LogOut,
   ChevronRight,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -80,12 +79,7 @@ const COLORS: Record<string, string> = {
 };
 const FAMILIES = ['ADS-B', 'Mode S', 'TIS-B', 'ADS-R', 'Mode A/C', 'Other'];
 async function dashboardFetch(path: string, options?: RequestInit) {
-  const response = await fetch(path, options);
-  if (response.status === 401) {
-    window.location.replace('/login');
-    throw new Error('Sign in required');
-  }
-  return response;
+  return fetch(path, options);
 }
 const VIEWS = [
   ['overview', 'Overview', Activity],
@@ -1021,16 +1015,6 @@ export default function Home() {
                     <ChevronRight size={18} />
                   </button>
                 ))}
-                <form
-                  method="post"
-                  action="/auth/logout"
-                  className="sign-out-form"
-                >
-                  <button type="submit">
-                    <LogOut size={21} />
-                    <span>Sign out</span>
-                  </button>
-                </form>
                 <a
                   className="metric-reference"
                   href="https://github.com/wiedehopf/readsb/blob/v3.16.16/README-json.md"
@@ -1041,11 +1025,11 @@ export default function Home() {
                 </a>
                 <a
                   className="metric-reference"
-                  href="https://docs.ramideltoro.com"
+                  href="https://wiki.antenna.ramideltoro.com"
                   target="_blank"
                   rel="noreferrer"
                 >
-                  Project documentation <ExternalLink size={15} />
+                  Antenna wiki <ExternalLink size={15} />
                 </a>
               </nav>
             </SheetContent>
@@ -2075,7 +2059,7 @@ export default function Home() {
                 <p>
                   Use the antenna’s actual location. Leave both coordinates
                   blank if you don’t want distance calculations. This does not
-                  configure MLAT. Saved coordinates are visible in the protected
+                  configure MLAT. Saved coordinates are visible in the public
                   dashboard.
                 </p>
                 {!d.settings_editable && (
@@ -2104,7 +2088,7 @@ export default function Home() {
                   ['Radio mode', '1090 MHz aircraft reception'],
                   ['Local dashboard', 'http://127.0.0.1:8787'],
                   ['Remote dashboard', 'https://antenna.ramideltoro.com'],
-                  ['Remote access', 'Private · username and password required'],
+                  ['Remote access', 'Public · no account required'],
                   ['History retention', '7 days, recorded every 10 seconds'],
                   ['Page refresh', 'Every 2 seconds'],
                   [
@@ -2131,11 +2115,18 @@ export default function Home() {
         <span>Antenna Observatory</span>
         <nav aria-label="Project links">
           <a
-            href="https://docs.ramideltoro.com"
+            href="https://wiki.antenna.ramideltoro.com"
             target="_blank"
             rel="noreferrer"
           >
-            Documentation &amp; project wiki <ExternalLink size={14} />
+            Antenna wiki <ExternalLink size={14} />
+          </a>
+          <a
+            href="https://wiki.skyglow.ramideltoro.com"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Skyglow wiki <ExternalLink size={14} />
           </a>
           <a
             href="https://github.com/ramideltoro/antenna_observatory"

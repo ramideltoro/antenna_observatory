@@ -7,12 +7,12 @@ The system separates radio decoding, transport, presentation, and documentation.
 ```mermaid
 C4Context
     title Antenna Observatory system context
-    Person(owner, "Owner", "Uses the private dashboard")
+    Person(visitor, "Visitor", "Uses the public dashboard")
     System(obs, "Antenna Observatory", "Collects, stores, and presents aircraft receiver telemetry")
     System_Ext(airplanes, "airplanes.live", "Receives BeastReduce+ aircraft messages")
     System_Ext(github, "GitHub", "Version control, CI/CD, and documentation hosting")
     System_Ext(cloudflare, "Cloudflare", "DNS and encrypted tunnel ingress")
-    Rel(owner, obs, "Views", "HTTPS")
+    Rel(visitor, obs, "Views", "HTTPS")
     Rel(obs, airplanes, "Feeds decoded frames", "TCP 30004")
     Rel(github, obs, "Deploys tested releases", "SSH")
     Rel(cloudflare, obs, "Routes dashboard traffic", "Tunnel")
@@ -84,19 +84,17 @@ flowchart LR
     subgraph T3[Trusted VPS account]
       APP[Relay application]
       TOKEN2[Matching relay token]
-      AUTH[Account hash]
       DB[(History database)]
     end
-    subgraph T4[Authenticated browser]
-      SESSION[HttpOnly session]
+    subgraph T4[Public browser]
+      DASH[Dashboard and read APIs]
     end
     USB --> COL
     TOKEN1 --> COL
     COL --> HTTPS --> APP
     TOKEN2 --> APP
-    AUTH --> APP
     APP --> DB
-    APP --> SESSION
+    APP --> DASH
     COL --> TCP
 ```
 

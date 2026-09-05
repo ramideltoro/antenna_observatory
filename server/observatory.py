@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-"""Antenna Observatory collector, authenticated relay, and website server."""
-import argparse, collections, csv, gzip, hashlib, hmac, html, io, ipaddress, json, math, os, re, secrets, socket, sqlite3, subprocess, threading, time
-from http.cookies import SimpleCookie, CookieError
+"""Antenna Observatory collector, public dashboard relay, and website server."""
+import argparse, collections, csv, gzip, hmac, io, ipaddress, json, math, os, re, secrets, socket, sqlite3, subprocess, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
@@ -11,7 +10,6 @@ STATE = Path(os.environ.get('ANTENNA_STATE_DIR', Path.home() / 'Library/Applicat
 DATA = STATE / 'readsb'
 CONFIG = STATE / 'settings.json'
 REMOTE_CONFIG = STATE / 'remote-access.json'
-AUTH_CONFIG = STATE / 'account.json'
 DB = STATE / 'observatory.sqlite'
 LOG = Path.home() / 'Library/Logs/airplanes-live.log'
 RELAY_TOKEN = STATE / 'relay-token'
@@ -63,74 +61,6 @@ def validated_public_origin(value):
         raise ValueError('Public origin must be a single HTTPS hostname')
     if not re.fullmatch(r'[a-zA-Z0-9.-]+',parsed.hostname): raise ValueError('Invalid public hostname')
     return 'https://'+parsed.hostname.lower()
-
-class AccountAuth:
-    """One configured account. Opaque sessions are stored only on the server."""
-    session_seconds = 12 * 3600
-    attempt_window = 300
-    attempt_limit = 5
-    def __init__(self, account):
-        if account.get('algorithm') != 'pbkdf2-sha256' or not isinstance(account.get('username'), str) or not account['username']:
-            raise ValueError('A valid account configuration is required')
-        self.username = account['username'].encode('utf-8')
-        self.iterations = int(account['iterations'])
-        self.salt = bytes.fromhex(account['salt'])
-        self.password_hash = bytes.fromhex(account['password_hash'])
-        if self.iterations < 600000 or len(self.salt) < 16 or len(self.password_hash) != 32:
-            raise ValueError('Invalid password hash configuration')
-        self.lock = threading.RLock()
-        self.sessions = {}
-        self.attempts = {}
-        self.global_attempts = collections.deque()
-    @classmethod
-    def from_file(cls, path):
-        # No anonymous fallback when configuration is absent or corrupt.
-        return cls(json.loads(path.read_text()))
-    @staticmethod
-    def password_record(username, password):
-        salt = secrets.token_bytes(32)
-        digest = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, 600000)
-        return {'username': username, 'algorithm': 'pbkdf2-sha256', 'iterations': 600000,
-                'salt': salt.hex(), 'password_hash': digest.hex()}
-    def create_session(self, origin):
-        with self.lock:
-            now = time.time()
-            self.sessions = {key: value for key, value in self.sessions.items() if value[0] > now}
-            if len(self.sessions) >= 64:
-                self.sessions.pop(min(self.sessions, key=lambda key: self.sessions[key][0]))
-            token = secrets.token_urlsafe(32)
-            self.sessions[hashlib.sha256(token.encode()).hexdigest()] = (now + self.session_seconds, origin)
-            return token
-    def valid_session(self, token, origin):
-        if not re.fullmatch(r'[A-Za-z0-9_-]{43}', token): return False
-        key = hashlib.sha256(token.encode()).hexdigest()
-        with self.lock:
-            expiry, session_origin = self.sessions.get(key, (0, None))
-            if expiry <= time.time():
-                self.sessions.pop(key, None)
-                return False
-            return session_origin == origin
-    def revoke(self, token):
-        with self.lock: self.sessions.pop(hashlib.sha256(token.encode()).hexdigest(), None)
-    def login(self, username, password, client, origin):
-        with self.lock:
-            now = time.time()
-            self.attempts = {key: [stamp for stamp in stamps if stamp > now - self.attempt_window]
-                             for key, stamps in self.attempts.items() if stamps and stamps[-1] > now - self.attempt_window}
-            while self.global_attempts and self.global_attempts[0] <= now - self.attempt_window:
-                self.global_attempts.popleft()
-            attempts = self.attempts.setdefault(client, [])
-            if len(attempts) >= self.attempt_limit or len(self.global_attempts) >= 60:
-                return 429, None
-            attempts.append(now); self.global_attempts.append(now)
-            if not isinstance(username, str) or not isinstance(password, str) or len(username) > 100 or len(password) > 1024:
-                return 401, None
-            candidate = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), self.salt, self.iterations)
-            password_ok = hmac.compare_digest(candidate, self.password_hash)
-            user_ok = hmac.compare_digest(username.encode('utf-8'), self.username)
-            if not (password_ok and user_ok): return 401, None
-            self.attempts.pop(client, None)
-            return 200, self.create_session(origin)
 
 def aircraft_family(a):
     t=a.get('type','')
@@ -440,17 +370,6 @@ class Handler(BaseHTTPRequestHandler):
     def request_origin(self):
         host = self.headers.get('Host', '').lower()
         return ('http://' if urlparse('//'+host).hostname in ('127.0.0.1', 'localhost') else 'https://') + host
-    def cookie_name(self):
-        return '__Host-antenna_session' if self.request_origin().startswith('https:') else 'antenna_local_session'
-    def session_token(self):
-        cookie = SimpleCookie()
-        try: cookie.load(self.headers.get('Cookie', ''))
-        except CookieError: return ''
-        value = cookie.get(self.cookie_name())
-        return value.value if value else ''
-    def authenticated(self):
-        auth = getattr(self.server, 'auth', None)
-        return bool(auth and auth.valid_session(self.session_token(), self.request_origin()))
     def relay_authorized(self):
         expected=getattr(self.server,'relay_token','')
         supplied=self.headers.get('Authorization','')
@@ -467,38 +386,8 @@ class Handler(BaseHTTPRequestHandler):
             body=json.loads(self.rfile.read(length))
             return self.respond(200,self.server.obs.ingest(body))
         except (ValueError,TypeError,UnicodeError) as e:return self.respond(400,{'error':str(e)})
-    def session_cookie(self, token, clear=False):
-        cookie = SimpleCookie(); name = self.cookie_name(); cookie[name] = token
-        cookie[name]['path'] = '/'; cookie[name]['httponly'] = True; cookie[name]['samesite'] = 'Strict'
-        cookie[name]['max-age'] = 0 if clear else AccountAuth.session_seconds
-        if self.request_origin().startswith('https:'): cookie[name]['secure'] = True
-        return cookie[name].OutputString()
     def redirect(self, location, headers=None):
         return self.respond(303, '', 'text/html; charset=utf-8', dict(headers or {}, Location=location))
-    def login_page(self, status=200, message=''):
-        template = Path(__file__).with_name('login.html').read_text()
-        body = template.replace('{{message}}', html.escape(message)).replace('{{error_hidden}}', '' if message else 'hidden')
-        return self.respond(status, body, 'text/html; charset=utf-8', {'Retry-After': '300'} if status == 429 else None)
-    def login_request(self):
-        auth = getattr(self.server, 'auth', None)
-        if auth is None: return self.respond(503, {'error': 'Sign-in is unavailable'})
-        try:
-            length = int(self.headers.get('Content-Length', '0'))
-            if not 0 < length <= 4096 or self.headers.get('Content-Type', '').split(';')[0] != 'application/x-www-form-urlencoded':
-                raise ValueError()
-            fields = parse_qs(self.rfile.read(length).decode('utf-8'), keep_blank_values=True, max_num_fields=4)
-            if set(fields) != {'username', 'password'} or any(len(values) != 1 for values in fields.values()): raise ValueError()
-        except (ValueError, UnicodeError): return self.login_page(400, 'Enter your username and password.')
-        client = self.client_address[0]
-        if self.request_origin().startswith('https:'):
-            try: client = str(ipaddress.ip_address(self.headers.get('CF-Connecting-IP', client)))
-            except ValueError: pass
-        status, token = auth.login(fields['username'][0], fields['password'][0], client, self.request_origin())
-        if status == 429: return self.login_page(429, 'Too many attempts. Please try again in five minutes.')
-        if status != 200: return self.login_page(401, 'Incorrect username or password.')
-        # Replace any previous session presented by this browser.
-        auth.revoke(self.session_token())
-        return self.redirect('/', {'Set-Cookie': self.session_cookie(token)})
     def do_GET(self):
         if not self.valid_host(): return self.respond(403,{'error':'Unrecognized dashboard hostname'})
         parsed=urlparse(self.path); path=parsed.path
@@ -507,14 +396,9 @@ class Handler(BaseHTTPRequestHandler):
             if not self.relay_authorized(): return self.respond(401,{'error':'Invalid relay credential'})
             return self.respond(200,{'snapshot':self.server.obs.snapshot(),'logs':self.server.obs.logs()})
         if self.request_origin().startswith('https:') and self.headers.get('X-Forwarded-Proto') == 'http':
-            return self.redirect(self.server.public_origin + '/login')
+            return self.redirect(self.server.public_origin + '/')
         if path == '/login':
-            if getattr(self.server, 'auth', None) is None: return self.respond(503, {'error': 'Sign-in is unavailable'})
-            return self.redirect('/') if self.authenticated() else self.login_page()
-        if not self.authenticated():
-            if path.startswith('/api/') or path.startswith('/_next/') or path.endswith('.rsc'):
-                return self.respond(401, {'error': 'Sign in required'})
-            return self.redirect('/login')
+            return self.redirect('/')
         if path=='/api/snapshot':
             snap=self.server.obs.snapshot()
             snap['settings_editable']=urlparse('//'+self.headers.get('Host','')).hostname in ('127.0.0.1','localhost')
@@ -541,7 +425,7 @@ class Handler(BaseHTTPRequestHandler):
         target=getattr(self.server,'static_files',{}).get(path if path!='/' else '/index.html')
         if target is None and '.' not in Path(path).name: target=getattr(self.server,'static_files',{}).get('/index.html')
         if target is None: return self.respond(404,{'error':'Page not built yet'})
-        cache='private, max-age=31536000, immutable' if path.startswith('/_next/static/') else 'private, no-cache'
+        cache='public, max-age=31536000, immutable' if path.startswith('/_next/static/') else 'public, no-cache'
         kind=STATIC_CONTENT_TYPES.get(target.suffix.lower(),'application/octet-stream')
         return self.respond(200,target.read_bytes(),kind,{'Cache-Control':cache})
     def do_POST(self):
@@ -550,11 +434,6 @@ class Handler(BaseHTTPRequestHandler):
         if not self.valid_origin(): return self.respond(403,{'error':'Matching dashboard origin required'})
         if self.request_origin().startswith('https:') and self.headers.get('X-Forwarded-Proto') == 'http':
             return self.respond(403, {'error': 'HTTPS required'})
-        if urlparse(self.path).path == '/auth/login': return self.login_request()
-        if not self.authenticated(): return self.respond(401, {'error': 'Sign in required'})
-        if urlparse(self.path).path == '/auth/logout':
-            self.server.auth.revoke(self.session_token())
-            return self.redirect('/login', {'Set-Cookie': self.session_cookie('', clear=True)})
         if urlparse('//'+self.headers.get('Host','')).hostname not in ('127.0.0.1','localhost'):
             return self.respond(403,{'error':'Station settings can only be changed from the local dashboard on this Mac.'})
         if urlparse(self.path).path!='/api/settings': return self.respond(404,{'error':'Unknown endpoint'})
@@ -580,11 +459,10 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--port',type=int,default=8787);parser.add_argument('--relay',action='store_true');args=parser.parse_args()
     public_origin=validated_public_origin(read_json(REMOTE_CONFIG).get('public_origin'))
-    auth=AccountAuth.from_file(AUTH_CONFIG)
     relay_token=RELAY_TOKEN.read_text().strip()
     if len(relay_token)<32: raise ValueError('A valid relay token is required')
     obs=RelayObservatory() if args.relay else Observatory()
-    server=ThreadingHTTPServer(('127.0.0.1',args.port),Handler);server.obs=obs;server.public_origin=public_origin;server.auth=auth;server.relay_mode=args.relay;server.relay_token=relay_token;server.static_files=build_static_manifest(ROOT/'dist/client')
+    server=ThreadingHTTPServer(('127.0.0.1',args.port),Handler);server.obs=obs;server.public_origin=public_origin;server.relay_mode=args.relay;server.relay_token=relay_token;server.static_files=build_static_manifest(ROOT/'dist/client')
     if not args.relay: obs.start()
     print(f'Antenna Observatory: http://127.0.0.1:{args.port}',flush=True)
     try: server.serve_forever()

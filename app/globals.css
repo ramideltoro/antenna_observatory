@@ -13,12 +13,12 @@
   --color-popover: var(--card);
   --color-popover-foreground: var(--foreground);
   --color-primary: var(--primary);
-  --color-primary-foreground: #221704;
-  --color-secondary: #29251d;
+  --color-primary-foreground: #1d1404;
+  --color-secondary: #293022;
   --color-secondary-foreground: var(--foreground);
-  --color-muted: #242119;
+  --color-muted: #242a20;
   --color-muted-foreground: var(--muted-foreground);
-  --color-accent: #33291a;
+  --color-accent: #35301c;
   --color-accent-foreground: var(--primary);
   --color-border: var(--border);
   --color-input: var(--border);
@@ -30,15 +30,15 @@
 }
 :root,
 .dark {
-  --background: #14120e;
-  --foreground: #f2ede3;
-  --card: #1d1a14;
-  --border: #383126;
-  --primary: #ffbb45;
-  --muted-foreground: #b5aa98;
-  --muted-deep: #897e6c;
-  --surface: #242017;
-  --amber-dim: #342817;
+  --background: #11150f;
+  --foreground: #f4f1e7;
+  --card: #1a2017;
+  --border: #38402f;
+  --primary: #e9a52c;
+  --muted-foreground: #b9b7a4;
+  --muted-deep: #858575;
+  --surface: #232a1e;
+  --amber-dim: #3a3018;
   color-scheme: dark;
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -52,7 +52,11 @@ html {
 }
 body {
   margin: 0;
-  background: var(--background);
+  background-color: var(--background);
+  background-image:
+    linear-gradient(rgb(233 165 44 / 3%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(233 165 44 / 3%) 1px, transparent 1px);
+  background-size: 44px 44px;
   color: var(--foreground);
   font-size: 16px;
   line-height: 1.5;
@@ -146,7 +150,14 @@ main,
 }
 .app-shell {
   min-height: 100dvh;
-  background: radial-gradient(ellipse at 85% 0, #85560e0c, transparent 38%);
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(circle at 82% 0, rgb(233 165 44 / 12%), transparent 30rem),
+    radial-gradient(circle at 8% 55%, rgb(96 128 68 / 7%), transparent 36rem);
+}
+.app-shell > main {
+  flex: 1;
 }
 .site-footer {
   width: min(1440px, calc(100% - 64px));
@@ -161,7 +172,7 @@ main,
   font-size: 12px;
 }
 .site-footer > span {
-  color: #d5c39e;
+  color: #d9c69e;
   font-weight: 650;
   letter-spacing: 0.04em;
 }
@@ -176,12 +187,12 @@ main,
   align-items: center;
   gap: 6px;
   min-height: 44px;
-  color: #e4b964;
+  color: #e9b957;
   text-decoration: none;
 }
 .site-footer a:hover,
 .site-footer a:focus-visible {
-  color: #ffd083;
+  color: #ffd17c;
   text-decoration: underline;
   text-underline-offset: 4px;
 }
@@ -194,7 +205,8 @@ main,
   justify-content: space-between;
   gap: 16px;
   border-bottom: 1px solid var(--border);
-  background: #18150fec;
+  background: #151a12f2;
+  backdrop-filter: blur(16px);
 }
 .brand {
   display: flex;
@@ -2106,12 +2118,6 @@ h2 {
   text-decoration: none;
   font-size: 13px;
 }
-.sign-out-form {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid #ffcc7620;
-}
-
 /* Independent control rows prevent wrapping controls from covering later content. */
 .view-controls {
   display: grid;

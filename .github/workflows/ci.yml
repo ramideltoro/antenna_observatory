@@ -132,36 +132,20 @@ jobs:
         with:
           name: antenna-observatory-release
 
-      - name: Start an authenticated test dashboard
+      - name: Start a public test dashboard
         run: |
           tar -xzf release.tgz
           export ANTENNA_STATE_DIR="$RUNNER_TEMP/antenna-state"
           mkdir -p "$ANTENNA_STATE_DIR"
-          printf '%s\n' 'ci-only-password' | python ops/set-account.py ci --password-stdin
           printf '%064d\n' 0 > "$ANTENNA_STATE_DIR/relay-token"
           python server/observatory.py --relay --port 8787 > "$RUNNER_TEMP/observatory.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/observatory.pid"
           for attempt in {1..30}; do
-            curl --fail --silent http://127.0.0.1:8787/login >/dev/null && exit 0
+            curl --fail --silent http://127.0.0.1:8787/ >/dev/null && exit 0
             sleep 1
           done
           cat "$RUNNER_TEMP/observatory.log"
           exit 1
-
-      - name: Establish test session
-        run: |
-          curl --silent --show-error --cookie-jar "$RUNNER_TEMP/cookies" \
-            --header 'Content-Type: application/x-www-form-urlencoded' \
-            --header 'Origin: http://127.0.0.1:8787' \
-            --data 'username=ci&password=ci-only-password' \
-            http://127.0.0.1:8787/auth/login >/dev/null
-          cookie="$(awk '$6 == "antenna_local_session" { print $6 "=" $7 }' "$RUNNER_TEMP/cookies")"
-          test -n "$cookie"
-          echo "::add-mask::$cookie"
-          echo "LHCI_COOKIE=$cookie" >> "$GITHUB_ENV"
-          status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
-            --header "Cookie: $cookie" http://127.0.0.1:8787/)"
-          test "$status" = 200
 
       - name: Run mobile Lighthouse budgets
         run: pnpm test:lighthouse

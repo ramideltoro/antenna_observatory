@@ -1,6 +1,6 @@
-site_name: Antenna Observatory & Skyglow
-site_description: Architecture, setup, operations, and signal reference for the Antenna Observatory and Skyglow
-site_url: https://docs.ramideltoro.com
+site_name: Antenna Observatory Wiki
+site_description: Architecture, setup, operations, and signal reference for Antenna Observatory
+site_url: https://wiki.antenna.ramideltoro.com
 repo_url: https://github.com/ramideltoro/antenna_observatory
 repo_name: ramideltoro/antenna_observatory
 edit_uri: edit/main/wiki-site/docs/
@@ -44,19 +44,6 @@ theme:
 
 nav:
   - Home: index.md
-  - Skyglow:
-      - Overview: skyglow/index.md
-      - Using Skyglow: skyglow/use.md
-      - Architecture: skyglow/architecture.md
-      - Receiver modes: skyglow/receiver-modes.md
-      - Data and API: skyglow/data-api.md
-      - Security: skyglow/security.md
-      - Operations: skyglow/operations.md
-      - CI/CD: skyglow/ci-cd.md
-      - Development: skyglow/development.md
-      - Troubleshooting: skyglow/troubleshooting.md
-      - Current release: skyglow/project/current-release.md
-      - Release history: skyglow/project/release-history.md
   - Start here:
       - Access and use: getting-started.md
       - Mac receiver setup: mac-setup.md
@@ -76,6 +63,7 @@ nav:
       - Design decisions: decisions.md
       - Release notes: project/release-notes.md
       - Glossary: glossary.md
+  - Skyglow Wiki ↗: https://wiki.skyglow.ramideltoro.com
 
 plugins:
   - search
@@ -122,8 +110,8 @@ extra:
       link: https://antenna.ramideltoro.com
       name: Live dashboard
     - icon: material/radio
-      link: https://skyglow.ramideltoro.com
-      name: Skyglow radio observatory
+      link: https://wiki.skyglow.ramideltoro.com
+      name: Skyglow wiki
     - icon: fontawesome/brands/github
       link: https://github.com/ramideltoro/skyglow
       name: Skyglow source

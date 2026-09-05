@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install the already-built dashboard as a login service on this Mac."""
+"""Install the already-built dashboard as a local service on this Mac."""
 import os, plistlib, re, shutil, subprocess, time
 from pathlib import Path
 ROOT=Path(__file__).resolve().parent.parent
@@ -29,7 +29,6 @@ def receiver_environment():
 def main():
     built=ROOT/'dist/client'
     if not (built/'index.html').is_file(): raise SystemExit('Build the website first: pnpm build')
-    if not (BASE/'state/account.json').is_file(): raise SystemExit('Configure the single dashboard account before installing.')
     if not (BASE/'state/relay-token').is_file(): raise SystemExit('Configure the protected telemetry relay before installing.')
     BASE.mkdir(parents=True,exist_ok=True)
     stage=BASE/'app-next';installed=BASE/'app';previous=BASE/'app-previous'
@@ -37,7 +36,6 @@ def main():
     (stage/'server').mkdir(parents=True)
     shutil.copytree(built,stage/'dist/client')
     shutil.copy2(ROOT/'server/observatory.py',stage/'server/observatory.py')
-    shutil.copy2(ROOT/'server/login.html',stage/'server/login.html')
     (stage/'ops').mkdir()
     shutil.copy2(ROOT/'ops/telemetry-uplink.py',stage/'ops/telemetry-uplink.py')
     if run('/bin/launchctl','print',f'{DOMAIN}/{LABEL}').returncode==0:
