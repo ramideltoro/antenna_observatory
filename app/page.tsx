@@ -1041,7 +1041,7 @@ export default function Home() {
                 </a>
                 <a
                   className="metric-reference"
-                  href="https://docs.antenna.ramideltoro.com"
+                  href="https://docs.ramideltoro.com"
                   target="_blank"
                   rel="noreferrer"
                 >
@@ -2131,7 +2131,7 @@ export default function Home() {
         <span>Antenna Observatory</span>
         <nav aria-label="Project links">
           <a
-            href="https://docs.antenna.ramideltoro.com"
+            href="https://docs.ramideltoro.com"
             target="_blank"
             rel="noreferrer"
           >
