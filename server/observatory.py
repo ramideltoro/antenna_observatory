@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Antenna Observatory collector, authenticated relay, and website server."""
-import argparse, collections, csv, gzip, hashlib, hmac, html, io, ipaddress, json, math, mimetypes, os, re, secrets, socket, sqlite3, subprocess, threading, time
+import argparse, collections, csv, gzip, hashlib, hmac, html, io, ipaddress, json, math, os, re, secrets, socket, sqlite3, subprocess, threading, time
 from http.cookies import SimpleCookie, CookieError
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -22,6 +22,31 @@ FEEDER_ID = os.environ.get('ANTENNA_FEEDER_ID', 'configured')
 FAMILIES = ['ADS-B', 'Mode S', 'TIS-B', 'ADS-R', 'Mode A/C', 'Other']
 DF_NAMES = {0:'Short air-to-air surveillance',4:'Altitude reply',5:'Identity reply',11:'All-call reply',16:'Long air-to-air surveillance',17:'ADS-B extended squitter',18:'Extended squitter / rebroadcast',19:'Military extended squitter',20:'Comm-B altitude reply',21:'Comm-B identity reply',24:'Comm-D extended length'}
 TYPE_NAMES = {**{n:'Identification' for n in range(1,5)},**{n:'Surface position' for n in range(5,9)},**{n:'Airborne position (barometric)' for n in range(9,19)},19:'Velocity',**{n:'Airborne position (GNSS)' for n in range(20,23)},28:'Aircraft status',29:'Target state',31:'Operational status'}
+STATIC_CONTENT_TYPES = {
+    '.css':'text/css; charset=utf-8', '.html':'text/html; charset=utf-8', '.ico':'image/x-icon',
+    '.js':'application/javascript; charset=utf-8', '.json':'application/json', '.map':'application/json',
+    '.png':'image/png', '.rsc':'text/x-component; charset=utf-8', '.svg':'image/svg+xml',
+    '.txt':'text/plain; charset=utf-8', '.webmanifest':'application/manifest+json', '.woff':'font/woff',
+    '.woff2':'font/woff2',
+}
+
+def build_static_manifest(public):
+    public = public.resolve()
+    if not public.is_dir(): return {}
+    return {'/'+candidate.relative_to(public).as_posix(): candidate for candidate in public.rglob('*') if candidate.is_file()}
+
+def write_private_json(path, value):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name('.'+path.name+'.'+secrets.token_hex(8)+'.tmp')
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
+            json.dump(value, stream, separators=(',', ':'))
+        os.replace(temporary, path)
+        os.chmod(path, 0o600)
+    finally:
+        try: temporary.unlink()
+        except FileNotFoundError: pass
 
 def read_json(path, default=None):
     try: return json.loads(path.read_text())
@@ -513,13 +538,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(200,out.getvalue(),'text/csv; charset=utf-8')
         if path=='/api/health': return self.respond(200,{'service':'antenna-observatory','collector_started':self.server.obs.started})
         if path.startswith('/api/'): return self.respond(404,{'error':'Unknown endpoint'})
-        public=(ROOT/'dist/client').resolve(); relative=path.lstrip('/') or 'index.html'; target=(public/relative).resolve()
-        if not target.is_relative_to(public): return self.respond(403,{'error':'Invalid path'})
-        if target.is_dir(): target=target/'index.html'
-        if not target.is_file() and '.' not in Path(relative).name: target=public/'index.html'
-        if not target.is_file(): return self.respond(404,{'error':'Page not built yet'})
+        target=getattr(self.server,'static_files',{}).get(path if path!='/' else '/index.html')
+        if target is None and '.' not in Path(path).name: target=getattr(self.server,'static_files',{}).get('/index.html')
+        if target is None: return self.respond(404,{'error':'Page not built yet'})
         cache='private, max-age=31536000, immutable' if path.startswith('/_next/static/') else 'private, no-cache'
-        return self.respond(200,target.read_bytes(),mimetypes.guess_type(str(target))[0] or 'application/octet-stream',{'Cache-Control':cache})
+        kind=STATIC_CONTENT_TYPES.get(target.suffix.lower(),'application/octet-stream')
+        return self.respond(200,target.read_bytes(),kind,{'Cache-Control':cache})
     def do_POST(self):
         if not self.valid_host(): return self.respond(403,{'error':'Unrecognized dashboard hostname'})
         if urlparse(self.path).path=='/api/ingest': return self.relay_ingest()
@@ -548,7 +572,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not math.isfinite(lat) or not math.isfinite(lon) or not -90<=lat<=90 or not -180<=lon<=180: raise ValueError('Invalid coordinates')
             values={'station_name':name,'latitude':lat,'longitude':lon}
             with self.server.obs.lock:
-                tmp=CONFIG.with_suffix('.tmp');tmp.write_text(json.dumps(values));tmp.replace(CONFIG);self.server.obs.settings=values
+                write_private_json(CONFIG,values);self.server.obs.settings=values
             self.server.obs.event('info','Local station settings updated')
             return self.respond(200,values)
         except (ValueError,TypeError,KeyError) as e: return self.respond(400,{'error':str(e)})
@@ -560,7 +584,7 @@ def main():
     relay_token=RELAY_TOKEN.read_text().strip()
     if len(relay_token)<32: raise ValueError('A valid relay token is required')
     obs=RelayObservatory() if args.relay else Observatory()
-    server=ThreadingHTTPServer(('127.0.0.1',args.port),Handler);server.obs=obs;server.public_origin=public_origin;server.auth=auth;server.relay_mode=args.relay;server.relay_token=relay_token
+    server=ThreadingHTTPServer(('127.0.0.1',args.port),Handler);server.obs=obs;server.public_origin=public_origin;server.auth=auth;server.relay_mode=args.relay;server.relay_token=relay_token;server.static_files=build_static_manifest(ROOT/'dist/client')
     if not args.relay: obs.start()
     print(f'Antenna Observatory: http://127.0.0.1:{args.port}',flush=True)
     try: server.serve_forever()

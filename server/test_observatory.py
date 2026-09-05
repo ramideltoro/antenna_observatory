@@ -1,5 +1,5 @@
 """Protocol, freshness, persistence and local API boundary regression checks."""
-import gzip, http.client, json, math, tempfile, threading, time, unittest, urllib.request, urllib.error
+import gzip, http.client, json, math, stat, tempfile, threading, time, unittest, urllib.request, urllib.error
 from types import SimpleNamespace
 from urllib.parse import urlencode
 from pathlib import Path
@@ -82,6 +82,7 @@ class TelemetryTests(unittest.TestCase):
             settings={'station_name':'Test antenna','latitude':28,'longitude':-82}
             with urllib.request.urlopen(urllib.request.Request(base+'/api/settings',data=json.dumps(settings).encode(),headers=dict(cookies,Origin=base))) as response: self.assertEqual(response.status,200)
             self.assertEqual(json.loads(app.CONFIG.read_text()),settings)
+            self.assertEqual(stat.S_IMODE(app.CONFIG.stat().st_mode),0o600)
             self.obs.collect();self.assertEqual(self.obs.snapshot()['aircraft'][0]['distance_nm'],0)
             server.public_origin='https://antenna.ramideltoro.com'
             with urllib.request.urlopen(urllib.request.Request(base+'/api/health',headers=dict(public_cookies,Host='antenna.ramideltoro.com'))) as response: self.assertEqual(response.status,200)
@@ -142,6 +143,7 @@ class AuthenticationTests(unittest.TestCase):
         self.server=app.ThreadingHTTPServer(('127.0.0.1',0),app.Handler)
         self.server.auth=self.auth; self.server.public_origin='https://antenna.ramideltoro.com'
         self.server.obs=SimpleNamespace(started=time.time(),snapshot=lambda: {'state':'live','aircraft':[]},history=lambda hours:{'points':[]},logs=lambda:['private log'])
+        self.server.static_files=app.build_static_manifest(static)
         self.thread=threading.Thread(target=self.server.serve_forever,daemon=True); self.thread.start()
         self.host='antenna.ramideltoro.com'; self.origin='https://'+self.host
     def tearDown(self):
@@ -168,6 +170,8 @@ class AuthenticationTests(unittest.TestCase):
         self.assertIn('no-store',headers['Cache-Control'])
         self.assertEqual(self.request('/api/snapshot',host='127.0.0.1:'+str(self.server.server_port))[0],401)
         self.assertEqual(self.request('/api/snapshot',cookie='__Host-antenna_session=forged')[0],401)
+        status,_,body=self.request('/../../server/observatory.py',cookie=self.login()[1]['Set-Cookie'].split(';')[0])
+        self.assertEqual(status,404);self.assertNotIn('AccountAuth',body)
         self.server.auth=None
         self.assertEqual(self.request('/api/snapshot')[0],401)
         self.assertEqual(self.request('/login')[0],503)

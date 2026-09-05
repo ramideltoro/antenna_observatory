@@ -164,7 +164,7 @@ jobs:
           test "$status" = 200
 
       - name: Run mobile Lighthouse budgets
-        run: pnpm exec lhci autorun
+        run: pnpm test:lighthouse
 
       - name: Upload Lighthouse reports
         if: always()
