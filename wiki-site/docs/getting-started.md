@@ -2,28 +2,23 @@
 
 ## Open the dashboard
 
-Visit [antenna.ramideltoro.com](https://antenna.ramideltoro.com). The application redirects every anonymous page request to `/login`, and anonymous API requests return HTTP 401. Enter the single owner account configured on the server.
-
-Credentials are deliberately absent from this public documentation and repository. The password is stored on the server only as a salted PBKDF2-SHA256 hash.
+Visit [antenna.ramideltoro.com](https://antenna.ramideltoro.com). The dashboard and its read APIs are public and open directly without an account.
 
 ```mermaid
 sequenceDiagram
-    actor Owner
+    actor Visitor
     participant Browser
     participant App as Observatory relay
-    Owner->>Browser: Open any dashboard path
+    Visitor->>Browser: Open the dashboard
     Browser->>App: GET /
-    App-->>Browser: 303 /login
-    Owner->>Browser: Submit credentials
-    Browser->>App: POST /auth/login
-    App-->>Browser: HttpOnly session cookie
+    App-->>Browser: Static mobile application
     Browser->>App: GET /api/snapshot
-    App-->>Browser: Live protected telemetry
+    App-->>Browser: Live telemetry
 ```
 
 ## Navigate
 
-The transparent menu button stays fixed at the upper-left corner. It opens every dashboard section and the sign-out action:
+The transparent menu button stays fixed at the upper-left corner. It opens every dashboard section:
 
 1. **Overview** — current aircraft, message rate, power, feed state, position plot, and health summary.
 2. **Signals** — signal-family rates, downlink formats, ADS-B type codes, and recent frames.

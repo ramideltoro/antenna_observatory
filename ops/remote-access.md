@@ -1,13 +1,13 @@
 # Remote operations
 
-The Mac owns the USB receiver and decodes 1090 MHz traffic locally. A protected uplink sends a compact telemetry snapshot to an existing Linux server every two seconds. The server stores rolling history and serves the authenticated dashboard through a Cloudflare Tunnel.
+The Mac owns the USB receiver and decodes 1090 MHz traffic locally. A protected uplink sends a compact telemetry snapshot to an existing Linux server every two seconds. The server stores rolling history and serves the public dashboard through a Cloudflare Tunnel.
 
-Machine-specific addresses, tunnel identifiers, account records, relay tokens, and deployment keys belong in protected state directories or GitHub Actions secrets. They are intentionally absent from this repository.
+Machine-specific addresses, tunnel identifiers, relay tokens, and deployment keys belong in protected state directories or GitHub Actions secrets. They are intentionally absent from this repository.
 
 ## Public topology
 
 - Dashboard: <https://antenna.ramideltoro.com>
-- Documentation: <https://docs.ramideltoro.com>
+- Documentation: <https://wiki.antenna.ramideltoro.com>
 - Receiver: Nooelec NESDR SMArt v5 attached to the Mac
 - Decoder: `readsb`, managed by a macOS LaunchAgent
 - Aircraft feed: direct outbound BeastReduce+ connection from the Mac to airplanes.live
@@ -32,6 +32,6 @@ ssh antenna-observatory 'pgrep -af "observatory.py --relay|cloudflared tunnel"'
 ssh antenna-observatory 'curl --fail http://127.0.0.1:8788/ready'
 ```
 
-The authenticated API, telemetry inspector, history, logs, exports, and station settings require a valid session. The relay ingestion endpoint additionally requires the private relay bearer token. Keep the Mac awake while the screen is locked so decoding and uplink processes continue.
+The dashboard, telemetry inspector, history, logs, and exports are public. The relay ingestion endpoint requires the private relay bearer token, and station settings can be changed only from loopback with a matching origin. Keep the Mac awake while the screen is locked so decoding and uplink processes continue.
 
 The full operating guide and recovery procedures are maintained in the project documentation site.

@@ -5,7 +5,7 @@ labels: [bug]
 body:
   - type: markdown
     attributes:
-      value: Do not include passwords, tokens, receiver UUIDs, station coordinates, or private logs.
+      value: Do not include tokens, receiver UUIDs, station coordinates, or private logs.
   - type: textarea
     id: problem
     attributes:

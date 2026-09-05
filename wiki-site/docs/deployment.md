@@ -23,18 +23,18 @@ flowchart LR
 
 ## Continuous integration stages
 
-| Stage           | Gate                                                                                               |
-| --------------- | -------------------------------------------------------------------------------------------------- |
-| Source safety   | Reject live feeder UUIDs, absolute Mac user paths, private-key markers, and GitHub-token formats   |
-| Formatting      | `oxfmt --check`                                                                                    |
-| Static quality  | `oxlint` and TypeScript `tsc --noEmit`                                                             |
-| Reliability     | Python backend unit and HTTP-boundary tests                                                        |
-| Build           | Reproducible `pnpm install --frozen-lockfile` and production Vinext build                          |
-| Performance     | Whole-site, JavaScript/CSS, and single-asset budgets                                               |
-| Browser quality | Authenticated mobile Lighthouse performance, accessibility, best-practice, LCP, and CLS thresholds |
-| Secrets         | Gitleaks scans complete Git history                                                                |
-| Dependencies    | Production audit on every change and dependency review on pull requests                            |
-| Static security | Scheduled and change-triggered CodeQL with extended JavaScript/TypeScript and Python queries       |
+| Stage           | Gate                                                                                             |
+| --------------- | ------------------------------------------------------------------------------------------------ |
+| Source safety   | Reject live feeder UUIDs, absolute Mac user paths, private-key markers, and GitHub-token formats |
+| Formatting      | `oxfmt --check`                                                                                  |
+| Static quality  | `oxlint` and TypeScript `tsc --noEmit`                                                           |
+| Reliability     | Python backend unit and HTTP-boundary tests                                                      |
+| Build           | Reproducible `pnpm install --frozen-lockfile` and production Vinext build                        |
+| Performance     | Whole-site, JavaScript/CSS, and single-asset budgets                                             |
+| Browser quality | Public mobile Lighthouse performance, accessibility, best-practice, LCP, and CLS thresholds      |
+| Secrets         | Gitleaks scans complete Git history                                                              |
+| Dependencies    | Production audit on every change and dependency review on pull requests                          |
+| Static security | Scheduled and change-triggered CodeQL with extended JavaScript/TypeScript and Python queries     |
 
 Dependabot checks npm and GitHub Actions weekly. Every third-party action is pinned to an immutable commit SHA.
 
@@ -53,10 +53,10 @@ sequenceDiagram
     Host->>Host: Atomically update current symlink
     Host->>Sup: Restart relay supervisor
     Sup->>App: Start from current release
-    Host->>App: GET loopback /login
+    Host->>App: GET loopback /
     alt healthy
       Host-->>GH: Deployment succeeded
-      GH->>App: Verify public login and anonymous API denial
+      GH->>App: Verify public dashboard and health API
     else unhealthy
       Host->>Host: Restore previous symlink
       Host->>Sup: Restart previous relay
@@ -64,7 +64,7 @@ sequenceDiagram
     end
 ```
 
-Application state lives outside every release, so rollback does not replace credentials, the history database, accepted snapshots, or tunnel configuration. Five release directories are retained.
+Application state lives outside every release, so rollback does not replace the history database, accepted snapshots, relay token, or tunnel configuration. Five release directories are retained.
 
 ## Required GitHub configuration
 
@@ -78,7 +78,7 @@ The main repository holds these Actions secrets:
 | `VPS_DEPLOY_KEY`  | Dedicated private key accepted only by the server account                |
 | `WIKI_DEPLOY_KEY` | Private half of a write-enabled deploy key scoped to the wiki repository |
 
-The dashboard password, relay bearer token, Cloudflare tunnel token, and receiver UUID are not GitHub Actions secrets because a code release does not need them.
+The relay bearer token, Cloudflare tunnel token, and receiver UUID are not GitHub Actions secrets because a code release does not need them.
 
 ## Wiki publication
 

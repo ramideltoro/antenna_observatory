@@ -1,6 +1,6 @@
 # Dashboard guide
 
-The React interface is statically built and served by the authenticated Python relay. It fetches snapshots every two seconds and history separately so chart updates do not block the live view.
+The React interface is statically built and served by the Python relay. It fetches snapshots every two seconds and history separately so chart updates do not block the live view.
 
 ## Information architecture
 
@@ -82,5 +82,5 @@ Charts display real stored samples. Missing or stale periods remain visible as g
 
 Inspector is the most detailed view. Choose snapshot, receiver statistics, raw aircraft, or host state, then filter field names and values. Tables use fixed responsive columns and wrap long nested values to avoid the overlap that can occur with unconstrained telemetry.
 
-!!! warning "Telemetry can describe real aircraft"
-Keep the dashboard account private. The site exposes no telemetry to an anonymous request even if someone enters an API or hash path directly.
+!!! info "Telemetry can describe real aircraft"
+The dashboard intentionally publishes received aircraft telemetry. Receiver ingestion remains token-protected and station-setting writes remain local-only.

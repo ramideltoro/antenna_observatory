@@ -30,11 +30,11 @@
 
 **Reason:** This avoids an inbound application port, uses the existing free Cloudflare configuration, and centralizes TLS and DNS.
 
-## ADR-006: Enforce application login
+## ADR-006: Publish dashboard reads
 
-**Decision:** Gate the complete dashboard and data API with one application account.
+**Decision:** Serve the dashboard and read APIs publicly while keeping relay ingestion token-protected and station-setting writes local-only.
 
-**Reason:** Direct URL paths must not expose real-time aircraft, station, history, or diagnostic data. Origin-bound, memory-only sessions keep the implementation small and make restart an effective global logout.
+**Reason:** The observatory is intended to be openly accessible and easy to use on mobile browsers. Separate write boundaries protect receiver integrity without adding a login step to public viewing.
 
 ## ADR-007: Keep documentation canonical with code
 

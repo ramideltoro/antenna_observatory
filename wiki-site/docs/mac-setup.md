@@ -130,11 +130,10 @@ It runs `/usr/bin/caffeinate -is`: `-i` prevents idle sleep and `-s` prevents sy
 ```bash
 pnpm install --frozen-lockfile
 pnpm build
-python3 ops/set-account.py YOUR_USERNAME
 python3 ops/install-local.py
 ```
 
-The account command prompts without echoing the password and writes only a salted hash. The installer copies the built app and Python service under `~/Library/Application Support/AntennaObservatory`, creates a `KeepAlive` web LaunchAgent, and preserves the previous installed app for rollback.
+The installer copies the built app and Python service under `~/Library/Application Support/AntennaObservatory`, creates a `KeepAlive` web LaunchAgent, and preserves the previous installed app for rollback.
 
 The local dashboard is available at `http://127.0.0.1:8787`.
 

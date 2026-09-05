@@ -26,7 +26,7 @@ if [ ! -d "$release" ]; then
   tar -xzf "$archive" -C "$release"
 fi
 
-for required in dist/client/index.html server/observatory.py server/login.html ops/servercheap-supervisor.py; do
+for required in dist/client/index.html server/observatory.py ops/servercheap-supervisor.py; do
   [ -f "$release/$required" ] || { echo "release is missing $required" >&2; exit 1; }
 done
 
@@ -48,7 +48,7 @@ healthy=false
 attempts=0
 while [ "$attempts" -lt 30 ]; do
   if curl --fail --silent --show-error --header 'Host: antenna.ramideltoro.com' \
-    http://127.0.0.1:8787/login >/dev/null; then
+    http://127.0.0.1:8787/ >/dev/null; then
     healthy=true
     break
   fi

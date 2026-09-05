@@ -5,26 +5,18 @@
 ```mermaid
 flowchart LR
     Anonymous[Anonymous internet] -->|HTTPS| Edge[Cloudflare]
-    Edge -->|Tunnel| Login[Login boundary]
-    Login -->|Valid session| Reads[Telemetry read APIs]
+    Edge -->|Tunnel| Reads[Public dashboard and read APIs]
     Mac[Trusted Mac] -->|Bearer token| Ingest[Ingest boundary]
     Ingest --> Relay[Relay state]
     Actions[GitHub Actions] -->|Restricted SSH key| Releases[Release directory]
     Actions -->|Repository deploy key| Wiki[Wiki repository]
 ```
 
-## Dashboard authentication
+## Public read boundary
 
-- Exactly one account record is configured.
-- Passwords use PBKDF2-SHA256 with 600,000 iterations and a random 32-byte salt.
-- Comparison uses constant-time functions.
-- Sessions use random opaque 256-bit tokens and are stored only in relay memory.
-- Cookies are `HttpOnly`, `SameSite=Strict`, path `/`, and `Secure` on HTTPS.
-- Sessions bind to the request origin and expire within 12 hours.
-- Per-client and global login throttles limit repeated attempts.
-- A relay restart invalidates every active session.
+Static assets, React paths, live telemetry, history, logs, exports, inspector data, and health data are public by design. The server still validates the public hostname and serves through a loopback-only Cloudflare Tunnel target. `/login` is retained only as a compatibility redirect to `/`; no password or browser session is required.
 
-Entering a deep URL does not bypass login. Static assets, React server-component paths, data APIs, history, logs, export, inspector data, and health data all require a valid session. The login page and the protected ingest route are the intended exceptions.
+The two write paths have narrower boundaries. `/api/ingest` accepts only the private relay bearer token shared with the Mac uploader. `/api/settings` accepts only loopback requests with a matching local origin, so internet visitors cannot change station metadata.
 
 ## Request validation
 
@@ -37,14 +29,13 @@ Entering a deep URL does not bypass login. Static assets, React server-component
 
 ## Secret locations
 
-| Secret                      | Storage                                      | Repository exposure |
-| --------------------------- | -------------------------------------------- | ------------------- |
-| Dashboard password          | Never stored; salted hash in protected state | None                |
-| Relay bearer token          | Mode-0600 file on Mac and VPS                | None                |
-| Cloudflare tunnel token     | Mode-0600 VPS state file                     | None                |
-| VPS deployment private key  | GitHub Actions secret                        | None                |
-| Wiki deployment private key | GitHub Actions secret                        | None                |
-| Receiver feed UUID          | Private rendered LaunchAgent                 | Placeholder only    |
+| Secret                      | Storage                       | Repository exposure |
+| --------------------------- | ----------------------------- | ------------------- |
+| Relay bearer token          | Mode-0600 file on Mac and VPS | None                |
+| Cloudflare tunnel token     | Mode-0600 VPS state file      | None                |
+| VPS deployment private key  | GitHub Actions secret         | None                |
+| Wiki deployment private key | GitHub Actions secret         | None                |
+| Receiver feed UUID          | Private rendered LaunchAgent  | Placeholder only    |
 
 CI runs both a purpose-built public-source boundary check and Gitleaks over complete Git history. Dependency review blocks vulnerable or disallowed new dependencies, production dependency auditing rejects high-severity advisories, and CodeQL runs extended JavaScript/TypeScript and Python queries.
 
@@ -58,8 +49,7 @@ If a credential might have been disclosed:
 
 1. rotate the affected token or key immediately;
 2. restart the dependent service;
-3. revoke old sessions by restarting the relay;
-4. review GitHub Actions, SSH, Cloudflare, and application logs;
-5. remove leaked material from Git history before making the repository public again.
+3. review GitHub Actions, SSH, Cloudflare, and application logs;
+4. remove leaked material from Git history before making the repository public again.
 
 Report a suspected code vulnerability privately through the repository’s security policy rather than a public issue.

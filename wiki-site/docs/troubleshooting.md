@@ -4,7 +4,7 @@
 
 ```mermaid
 flowchart TD
-    Start[Dashboard is stale] --> Public{Login page opens?}
+    Start[Dashboard is stale] --> Public{Dashboard opens?}
     Public -->|No| Tunnel[Check cloudflared and DNS]
     Public -->|Yes| Uplink{Uploader running?}
     Uplink -->|No| UL[Restart uplink and inspect its log]
@@ -64,9 +64,9 @@ An HTTP 401 from `/api/ingest` means the Mac and relay token files do not match.
 
 Check DNS resolution, Cloudflare Tunnel status, the Linux tunnel supervisor, and local relay readiness. The application should remain bound to loopback; do not expose port 8787 publicly as a workaround.
 
-## Login loops or every path returns login
+## A legacy bookmark opens `/login`
 
-Sessions are stored in relay memory and expire after 12 hours. A relay restart requires a new login. Clear the site cookie and sign in again. If all valid credentials fail, rebuild the sole account record with `ops/set-account.py` on the server and restart the relay.
+The compatibility route redirects to the public dashboard. If an older page appears, clear Safari’s cached website data for the domain and reload `https://antenna.ramideltoro.com/`.
 
 ## Signal seems too strong
 

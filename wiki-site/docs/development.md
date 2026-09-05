@@ -6,7 +6,7 @@
 app/                 React application and amber responsive theme
 components/          Charts and reusable UI components
 lib/                 Shared telemetry types and helpers
-server/              Python collector, relay, authentication, and tests
+server/              Python collector, relay, request boundaries, and tests
 ops/                 LaunchAgent templates and deployment utilities
 scripts/             CI source-safety and bundle-budget checks
 wiki-site/           Canonical MkDocs project documentation
@@ -43,11 +43,11 @@ pnpm build
 pnpm check:size
 ```
 
-Avoid committing `dist`, `work`, state directories, databases, logs, account records, tokens, keys, rendered LaunchAgents, or machine-specific verification captures.
+Avoid committing `dist`, `work`, state directories, databases, logs, tokens, keys, rendered LaunchAgents, or machine-specific verification captures.
 
 ## Backend test fixture
 
-The tests create temporary state and static directories. They cover password hashing, session and origin binding, login throttling, authenticated/anonymous routing, telemetry ingestion validation, history behavior, local-only writes, CSV safety, and path confinement without requiring a physical receiver.
+The tests create temporary state and static directories. They cover public read routing, host and origin validation, bearer-token ingestion, telemetry validation, history behavior, local-only writes, CSV safety, and path confinement without requiring a physical receiver.
 
 ## Documentation preview
 

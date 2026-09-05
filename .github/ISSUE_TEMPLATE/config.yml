@@ -4,5 +4,5 @@ contact_links:
     url: https://github.com/ramideltoro/antenna_observatory/security/advisories/new
     about: Report vulnerabilities privately
   - name: Project documentation
-    url: https://docs.antenna.ramideltoro.com
+    url: https://wiki.antenna.ramideltoro.com
     about: Read setup, operations, and troubleshooting guidance
