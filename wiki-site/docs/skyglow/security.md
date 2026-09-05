@@ -68,17 +68,17 @@ flowchart TD
     Manager --> Response[No-store and browser security headers]
 ```
 
-| Control | Purpose |
-| --- | --- |
-| Login throttling | Ten failed attempts from one client in five minutes trigger a temporary limit |
-| Host and Origin allowlists | Reject cross-site control submissions and unexpected hostnames |
-| Secure session cookie | Prevent JavaScript access, cross-site sending, and plaintext public transport |
-| POST-only controls | Prevent links, crawlers, and cached GET requests from changing hardware state |
-| Path confinement | Prevent media and static routes from escaping their configured roots |
-| Push URL allowlist | Limit subscriptions to Apple, Google, and Mozilla push services |
-| Private loopback links | Keep the Mac API and VPS receiver port off public interfaces |
-| Dedicated CI keys | Separate production and wiki credentials; no owner token is stored in the repository |
-| Pinned Actions | CI references reviewed action commits and Dependabot proposes updates |
+| Control                    | Purpose                                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------ |
+| Login throttling           | Ten failed attempts from one client in five minutes trigger a temporary limit        |
+| Host and Origin allowlists | Reject cross-site control submissions and unexpected hostnames                       |
+| Secure session cookie      | Prevent JavaScript access, cross-site sending, and plaintext public transport        |
+| POST-only controls         | Prevent links, crawlers, and cached GET requests from changing hardware state        |
+| Path confinement           | Prevent media and static routes from escaping their configured roots                 |
+| Push URL allowlist         | Limit subscriptions to Apple, Google, and Mozilla push services                      |
+| Private loopback links     | Keep the Mac API and VPS receiver port off public interfaces                         |
+| Dedicated CI keys          | Separate production and wiki credentials; no owner token is stored in the repository |
+| Pinned Actions             | CI references reviewed action commits and Dependabot proposes updates                |
 
 ## Repository security
 

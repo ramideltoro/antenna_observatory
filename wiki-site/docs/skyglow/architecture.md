@@ -58,15 +58,15 @@ sequenceDiagram
 
 ## Components
 
-| Component | Runs on | Responsibility |
-| --- | --- | --- |
-| Next/Vinext client | VPS and browser | Responsive application shell, map, controls, audio, and replay UI |
-| Caddy edge | VPS | Static files, compression, security headers, and API/media proxy |
-| cloudflared | VPS | Public HTTPS path without opening VPS web ports directly |
-| Reverse SSH LaunchAgent | Mac | Persistent encrypted loopback path to the VPS |
-| Python receiver service | Mac | Authentication, APIs, history, scheduling, decoder lifecycle, and media |
-| SQLite and media tree | Mac | Positions, alerts, sensors, captures, account, and recordings |
-| Decoder tools | Mac | Demodulation and decoding for the active receiver mode |
+| Component               | Runs on         | Responsibility                                                          |
+| ----------------------- | --------------- | ----------------------------------------------------------------------- |
+| Next/Vinext client      | VPS and browser | Responsive application shell, map, controls, audio, and replay UI       |
+| Caddy edge              | VPS             | Static files, compression, security headers, and API/media proxy        |
+| cloudflared             | VPS             | Public HTTPS path without opening VPS web ports directly                |
+| Reverse SSH LaunchAgent | Mac             | Persistent encrypted loopback path to the VPS                           |
+| Python receiver service | Mac             | Authentication, APIs, history, scheduling, decoder lifecycle, and media |
+| SQLite and media tree   | Mac             | Positions, alerts, sensors, captures, account, and recordings           |
+| Decoder tools           | Mac             | Demodulation and decoding for the active receiver mode                  |
 
 ## Recovery behavior
 

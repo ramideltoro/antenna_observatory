@@ -26,12 +26,12 @@ flowchart TD
 
 ## Main areas
 
-| Area | Purpose |
-| --- | --- |
-| **Live** | Current aircraft, map, range, altitude, direction, and overhead alerts |
-| **Replay** | Saved positions, day selection, animated trails, and records |
-| **Station** | Receiver status, installed tools, account controls, notifications, and sign out |
-| **Mode sheet** | Start a timed radio, satellite, or sensor session; return to aircraft |
+| Area           | Purpose                                                                         |
+| -------------- | ------------------------------------------------------------------------------- |
+| **Live**       | Current aircraft, map, range, altitude, direction, and overhead alerts          |
+| **Replay**     | Saved positions, day selection, animated trails, and records                    |
+| **Station**    | Receiver status, installed tools, account controls, notifications, and sign out |
+| **Mode sheet** | Start a timed radio, satellite, or sensor session; return to aircraft           |
 
 ## A receiver session
 
@@ -56,7 +56,7 @@ sequenceDiagram
 ```
 
 !!! warning "Aircraft history pauses"
-    Aircraft broadcasts cannot be archived while the single receiver is tuned to another band.
+Aircraft broadcasts cannot be archived while the single receiver is tuned to another band.
 
 ## Listening tips
 

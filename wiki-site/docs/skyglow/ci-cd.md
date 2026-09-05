@@ -27,20 +27,20 @@ flowchart LR
 
 ## Required gates
 
-| Stage | Protects |
-| --- | --- |
-| Formatting and linting | Review clarity and common JavaScript/TypeScript mistakes |
-| Type check | Component, API, and data-shape contracts |
-| Python unit tests and branch coverage | Authentication, bounds, replay, paths, and receiver behavior |
-| Dependency audits and PR dependency review | Known vulnerable package versions and risky upgrades |
-| Gitleaks plus GitHub push protection | Credentials accidentally entering history |
-| CodeQL | JavaScript/TypeScript and Python data-flow vulnerabilities |
-| OpenSSF Scorecard | Repository and supply-chain hygiene |
-| Production build | Reproducible deployable assets from the lockfile |
-| Bundle budget | iPhone payload growth beyond explicit raw and gzip limits |
-| Lighthouse | Performance, accessibility, best practices, and SEO regressions |
-| Atomic deploy and smoke test | Broken configuration, missing assets, or receiver path failure |
-| Documentation sync | Wiki pages and release history matching deployed behavior |
+| Stage                                      | Protects                                                        |
+| ------------------------------------------ | --------------------------------------------------------------- |
+| Formatting and linting                     | Review clarity and common JavaScript/TypeScript mistakes        |
+| Type check                                 | Component, API, and data-shape contracts                        |
+| Python unit tests and branch coverage      | Authentication, bounds, replay, paths, and receiver behavior    |
+| Dependency audits and PR dependency review | Known vulnerable package versions and risky upgrades            |
+| Gitleaks plus GitHub push protection       | Credentials accidentally entering history                       |
+| CodeQL                                     | JavaScript/TypeScript and Python data-flow vulnerabilities      |
+| OpenSSF Scorecard                          | Repository and supply-chain hygiene                             |
+| Production build                           | Reproducible deployable assets from the lockfile                |
+| Bundle budget                              | iPhone payload growth beyond explicit raw and gzip limits       |
+| Lighthouse                                 | Performance, accessibility, best practices, and SEO regressions |
+| Atomic deploy and smoke test               | Broken configuration, missing assets, or receiver path failure  |
+| Documentation sync                         | Wiki pages and release history matching deployed behavior       |
 
 ## Release sequence
 

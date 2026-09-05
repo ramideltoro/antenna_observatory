@@ -44,10 +44,10 @@ flowchart LR
     HLS --> Safari[Native Safari audio]
 ```
 
-| Source | Range | Modulation | Useful starting point |
-| --- | --- | --- | --- |
-| Aircraft voice | 118.000–136.975 MHz | AM | An active Tampa tower, approach, departure, or ATIS channel |
-| NOAA Weather Radio | 162.400–162.550 MHz | FM | 162.550 MHz in Tampa |
+| Source             | Range               | Modulation | Useful starting point                                       |
+| ------------------ | ------------------- | ---------- | ----------------------------------------------------------- |
+| Aircraft voice     | 118.000–136.975 MHz | AM         | An active Tampa tower, approach, departure, or ATIS channel |
+| NOAA Weather Radio | 162.400–162.550 MHz | FM         | 162.550 MHz in Tampa                                        |
 
 Audio is live with a small HLS buffer. Every tune resets the playlist and uses unique segment names so Safari cannot replay segments from the previous frequency.
 

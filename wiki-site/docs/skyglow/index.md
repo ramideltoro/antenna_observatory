@@ -72,12 +72,12 @@ One physical receiver can tune one band at a time. Aircraft collection pauses du
 
 ## Documentation map
 
-| Need | Start here |
-| --- | --- |
-| Open the app on an iPhone | [Using Skyglow](use.md) |
-| Understand the VPS and Mac split | [Architecture](architecture.md) |
-| Choose a frequency or decoder | [Receiver modes](receiver-modes.md) |
-| Understand storage and endpoints | [Data and API](data-api.md) |
-| Recover a failed service | [Operations](operations.md) and [Troubleshooting](troubleshooting.md) |
-| Review safeguards | [Security](security.md) |
-| Understand releases | [CI/CD](ci-cd.md) and [Current release](project/current-release.md) |
+| Need                             | Start here                                                            |
+| -------------------------------- | --------------------------------------------------------------------- |
+| Open the app on an iPhone        | [Using Skyglow](use.md)                                               |
+| Understand the VPS and Mac split | [Architecture](architecture.md)                                       |
+| Choose a frequency or decoder    | [Receiver modes](receiver-modes.md)                                   |
+| Understand storage and endpoints | [Data and API](data-api.md)                                           |
+| Recover a failed service         | [Operations](operations.md) and [Troubleshooting](troubleshooting.md) |
+| Review safeguards                | [Security](security.md)                                               |
+| Understand releases              | [CI/CD](ci-cd.md) and [Current release](project/current-release.md)   |
