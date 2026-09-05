@@ -9,7 +9,7 @@ Open the dashboard at **[antenna.ramideltoro.com](https://antenna.ramideltoro.co
 
 The dashboard includes aircraft, ADS-B and Mode S signal families, receiver health, airplanes.live connection state, history, events, raw telemetry, and station settings. It is designed for phones, tablets, and desktops.
 
-Read the **[project documentation and setup guide](https://docs.antenna.ramideltoro.com)** for architecture diagrams, the full Mac installation, signal definitions, operations, troubleshooting, security, API behavior, and the CI/CD pipeline.
+Read the **[project documentation and setup guide](https://docs.ramideltoro.com)** for architecture diagrams, the full Mac installation, signal definitions, operations, troubleshooting, security, API behavior, and the CI/CD pipeline.
 
 ## Local development
 

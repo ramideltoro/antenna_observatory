@@ -7,7 +7,7 @@ Machine-specific addresses, tunnel identifiers, account records, relay tokens, a
 ## Public topology
 
 - Dashboard: <https://antenna.ramideltoro.com>
-- Documentation: <https://docs.antenna.ramideltoro.com>
+- Documentation: <https://docs.ramideltoro.com>
 - Receiver: Nooelec NESDR SMArt v5 attached to the Mac
 - Decoder: `readsb`, managed by a macOS LaunchAgent
 - Aircraft feed: direct outbound BeastReduce+ connection from the Mac to airplanes.live
