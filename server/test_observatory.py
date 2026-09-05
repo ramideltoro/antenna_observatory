@@ -1,5 +1,5 @@
 """Protocol, freshness, persistence and local API boundary regression checks."""
-import http.client, json, math, tempfile, threading, time, unittest, urllib.request, urllib.error
+import gzip, http.client, json, math, tempfile, threading, time, unittest, urllib.request, urllib.error
 from types import SimpleNamespace
 from urllib.parse import urlencode
 from pathlib import Path
@@ -136,6 +136,7 @@ class AuthenticationTests(unittest.TestCase):
         (static/'index.html').write_text('Private dashboard')
         (static/'index.rsc').write_text('Private RSC payload')
         (static/'_next').mkdir(); (static/'_next/app.js').write_text('Private application')
+        (static/'_next/static/chunks').mkdir(parents=True);(static/'_next/static/chunks/app-hash.js').write_text('const privateApplication=true;'*200)
         self.patch=patch.object(app,'ROOT',root); self.patch.start()
         self.auth=app.AccountAuth(TEST_ACCOUNT)
         self.server=app.ThreadingHTTPServer(('127.0.0.1',0),app.Handler)
@@ -186,6 +187,16 @@ class AuthenticationTests(unittest.TestCase):
         status,headers,_=self.request('/auth/logout','POST',cookie=token,origin=self.origin)
         self.assertEqual(status,303);self.assertIn('Max-Age=0',headers['Set-Cookie'])
         self.assertEqual(self.request('/api/snapshot',cookie=token)[0],401)
+    def test_static_assets_are_compressed_and_privately_cached(self):
+        status,headers,_=self.login();cookie=headers['Set-Cookie'].split(';')[0]
+        connection=http.client.HTTPConnection('127.0.0.1',self.server.server_port,timeout=5)
+        connection.request('GET','/_next/static/chunks/app-hash.js',headers={'Host':self.host,'Cookie':cookie,'Accept-Encoding':'gzip'})
+        response=connection.getresponse();body=response.read();response_headers=dict(response.getheaders());connection.close()
+        self.assertEqual(response.status,200)
+        self.assertEqual(response_headers['Content-Encoding'],'gzip')
+        self.assertEqual(response_headers['Vary'],'Accept-Encoding')
+        self.assertIn('immutable',response_headers['Cache-Control'])
+        self.assertIn(b'privateApplication',gzip.decompress(body))
     def test_origin_checks_expiry_and_public_settings(self):
         body=urlencode({'username':'operator','password':'test-only-password'})
         for origin in (None,'https://foreign.example','http://antenna.ramideltoro.com'):

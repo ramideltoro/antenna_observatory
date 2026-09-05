@@ -152,12 +152,16 @@ jobs:
         run: |
           curl --silent --show-error --cookie-jar "$RUNNER_TEMP/cookies" \
             --header 'Content-Type: application/x-www-form-urlencoded' \
+            --header 'Origin: http://127.0.0.1:8787' \
             --data 'username=ci&password=ci-only-password' \
             http://127.0.0.1:8787/auth/login >/dev/null
           cookie="$(awk '$6 == "antenna_local_session" { print $6 "=" $7 }' "$RUNNER_TEMP/cookies")"
           test -n "$cookie"
           echo "::add-mask::$cookie"
           echo "LHCI_COOKIE=$cookie" >> "$GITHUB_ENV"
+          status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --header "Cookie: $cookie" http://127.0.0.1:8787/)"
+          test "$status" = 200
 
       - name: Run mobile Lighthouse budgets
         run: pnpm exec lhci autorun

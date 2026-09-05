@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Antenna Observatory collector, authenticated relay, and website server."""
-import argparse, collections, csv, hashlib, hmac, html, io, ipaddress, json, math, mimetypes, os, re, secrets, socket, sqlite3, subprocess, threading, time
+import argparse, collections, csv, gzip, hashlib, hmac, html, io, ipaddress, json, math, mimetypes, os, re, secrets, socket, sqlite3, subprocess, threading, time
 from http.cookies import SimpleCookie, CookieError
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -383,11 +383,15 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self,*args): pass
     def respond(self,status,value,kind='application/json',headers=None):
         body=json.dumps(value,allow_nan=False).encode() if kind=='application/json' else value.encode() if isinstance(value,str) else value
-        self.send_response(status); self.send_header('Content-Type',kind); self.send_header('Content-Length',str(len(body))); self.send_header('Cache-Control','private, no-store')
+        extra=dict(headers or {});cache=extra.pop('Cache-Control','private, no-store')
+        compressible=kind.startswith(('text/','application/json','application/javascript','image/svg+xml'))
+        if len(body)>=1024 and compressible and 'gzip' in self.headers.get('Accept-Encoding','').lower():
+            body=gzip.compress(body,compresslevel=6);extra['Content-Encoding']='gzip';extra['Vary']='Accept-Encoding'
+        self.send_response(status); self.send_header('Content-Type',kind); self.send_header('Content-Length',str(len(body))); self.send_header('Cache-Control',cache)
         self.send_header('X-Content-Type-Options','nosniff'); self.send_header('X-Frame-Options','DENY')
         self.send_header('Referrer-Policy','same-origin')
         self.send_header('Content-Security-Policy',"frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
-        for name, value in (headers or {}).items(): self.send_header(name, value)
+        for name, value in extra.items(): self.send_header(name, value)
         self.end_headers()
         try: self.wfile.write(body)
         except (BrokenPipeError,ConnectionResetError): pass
@@ -514,7 +518,8 @@ class Handler(BaseHTTPRequestHandler):
         if target.is_dir(): target=target/'index.html'
         if not target.is_file() and '.' not in Path(relative).name: target=public/'index.html'
         if not target.is_file(): return self.respond(404,{'error':'Page not built yet'})
-        return self.respond(200,target.read_bytes(),mimetypes.guess_type(str(target))[0] or 'application/octet-stream')
+        cache='private, max-age=31536000, immutable' if path.startswith('/_next/static/') else 'private, no-cache'
+        return self.respond(200,target.read_bytes(),mimetypes.guess_type(str(target))[0] or 'application/octet-stream',{'Cache-Control':cache})
     def do_POST(self):
         if not self.valid_host(): return self.respond(403,{'error':'Unrecognized dashboard hostname'})
         if urlparse(self.path).path=='/api/ingest': return self.relay_ingest()
