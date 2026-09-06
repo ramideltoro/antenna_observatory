@@ -1078,9 +1078,11 @@ function MaintenanceView({ editable }: { editable: boolean }) {
             </form>
           ) : (
             <div className="feature-empty maintenance-readonly">
-              Open <strong>http://127.0.0.1:8787</strong> on the receiver Mac to
-              add or delete an annotation. The protected telemetry uplink will
-              mirror it here automatically.
+              <p>
+                Open <strong>http://127.0.0.1:8787</strong> on the receiver Mac
+                to add or delete an annotation. The protected telemetry uplink
+                will mirror it here automatically.
+              </p>
             </div>
           )}
         </FeaturePanel>
