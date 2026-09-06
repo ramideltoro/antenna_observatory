@@ -21,6 +21,10 @@ def replace_launch_agent(path,job):
     if loaded:
         result=run('/bin/launchctl','bootout',f'{DOMAIN}/{job["Label"]}')
         if result.returncode:raise SystemExit(result.stderr)
+        for _ in range(40):
+            if run('/bin/launchctl','print',f'{DOMAIN}/{job["Label"]}').returncode:break
+            time.sleep(.25)
+        else:raise SystemExit(f'{job["Label"]} did not stop; its installed definition is unchanged.')
     temporary=path.with_suffix('.tmp');temporary.write_bytes(plistlib.dumps(job));temporary.chmod(0o644);temporary.replace(path)
     result=run('/bin/launchctl','bootstrap',DOMAIN,str(path))
     if result.returncode:
