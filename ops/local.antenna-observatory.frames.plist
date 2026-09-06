@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>local.antenna-observatory.frames</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/bin/python3</string>
+		<string>__HOME__/Library/Application Support/AntennaObservatory/app/ops/frame-uplink.py</string>
+		<string>--remote</string>
+		<string>https://antenna.ramideltoro.com/api/ingest/beast</string>
+		<string>--token-file</string>
+		<string>__HOME__/Library/Application Support/AntennaObservatory/state/relay-token</string>
+		<string>--dump-dir</string>
+		<string>__HOME__/Library/Application Support/AntennaObservatory/state/beast-dump</string>
+		<string>--spool-dir</string>
+		<string>__HOME__/Library/Application Support/AntennaObservatory/state/beast-spool</string>
+		<string>--status-file</string>
+		<string>__HOME__/Library/Application Support/AntennaObservatory/state/frame-uplink-status.json</string>
+		<string>--zstd</string>
+		<string>/opt/homebrew/bin/zstd</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>ThrottleInterval</key>
+	<integer>10</integer>
+	<key>StandardOutPath</key>
+	<string>__HOME__/Library/Logs/antenna-observatory-frames.log</string>
+	<key>StandardErrorPath</key>
+	<string>__HOME__/Library/Logs/antenna-observatory-frames.log</string>
+</dict>
+</plist>

@@ -4,17 +4,18 @@ The browser uses same-origin HTTP endpoints. Read endpoints are public and requi
 
 ## Routes
 
-| Method | Path                   | Access                        | Purpose                                                             |
-| ------ | ---------------------- | ----------------------------- | ------------------------------------------------------------------- |
-| GET    | `/login`               | Public                        | Redirect legacy bookmarks to `/`                                    |
-| GET    | `/api/snapshot`        | Public                        | Latest aircraft, signals, metrics, events, host, and hardware state |
-| GET    | `/api/history?hours=1` | Public                        | One to 168 hours of downsampled stored measurements                 |
-| GET    | `/api/logs`            | Public                        | Bounded decoder log tail                                            |
-| GET    | `/api/export`          | Public                        | Aircraft snapshot as CSV                                            |
-| GET    | `/api/health`          | Public                        | Application health and collector start time                         |
-| POST   | `/api/settings`        | Local loopback + local origin | Validate and update station name and coordinates                    |
-| GET    | `/api/uplink`          | Local loopback bearer token   | Snapshot envelope for the Mac uploader                              |
-| POST   | `/api/ingest`          | Relay bearer token            | Accept a validated Mac telemetry envelope                           |
+| Method | Path                         | Access                        | Purpose                                                             |
+| ------ | ---------------------------- | ----------------------------- | ------------------------------------------------------------------- |
+| GET    | `/login`                     | Public                        | Redirect legacy bookmarks to `/`                                    |
+| GET    | `/api/snapshot`              | Public                        | Latest aircraft, signals, metrics, events, host, and hardware state |
+| GET    | `/api/history?hours=1`       | Public                        | One to 168 hours of downsampled stored measurements                 |
+| GET    | `/api/logs`                  | Public                        | Bounded decoder log tail                                            |
+| GET    | `/api/export`                | Public                        | Aircraft snapshot as CSV                                            |
+| GET    | `/api/health`                | Public                        | Application health and collector start time                         |
+| POST   | `/api/settings`              | Local loopback + local origin | Validate and update station name and coordinates                    |
+| GET    | `/api/uplink`                | Local loopback bearer token   | Snapshot envelope for the Mac uploader                              |
+| POST   | `/api/ingest`                | Relay bearer token            | Accept a validated Mac telemetry envelope                           |
+| PUT    | `/api/ingest/beast/{sha256}` | Relay bearer token            | Durably accept an idempotent Zstandard Beast batch                  |
 
 ## Snapshot state
 
@@ -57,6 +58,10 @@ classDiagram
 ```
 
 Unknown values are represented as JSON `null` or absent source fields. Consumers must not interpret a missing measurement as zero.
+
+`frame_pipeline` in the snapshot reports capture, upload, processing, local spool, backlog, failed-batch, and data-gap state. Beast upload URLs use the lowercase SHA-256 of the exact compressed request body. The relay acknowledges only after validating the checksum, bounded decompression, Beast framing, and durable atomic storage.
+
+Beast uploads use `Content-Type: application/zstd`, have a 16 MiB compressed-body limit, and are safe to retry. Repeating an accepted hash returns success without inserting duplicate frames.
 
 ## Error behavior
 

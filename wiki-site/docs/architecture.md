@@ -27,17 +27,23 @@ flowchart TB
       SDR --> Readsb[readsb]
       Readsb --> JSON[JSON files]
       Readsb --> Beast[Loopback Beast port 30905]
+      Readsb --> Dump[Two-minute zstd Beast files]
       JSON --> Collector[Observatory collector]
       Beast --> Collector
       Awake[caffeinate LaunchAgent] -. keeps awake .-> Readsb
       Collector --> Uplink[Telemetry uploader]
+      Dump --> FrameUplink[Durable frame uploader]
     end
 
     Readsb -->|TCP 30004| AL[airplanes.live]
     Uplink -->|HTTPS bearer token| Ingest[Relay /api/ingest]
+    FrameUplink -->|Idempotent HTTPS PUT| BatchIngest[Relay /api/ingest/beast]
 
     subgraph VPS[Existing Linux server]
       Ingest --> Relay[Python relay]
+      BatchIngest --> Archive[(72-hour Beast archive)]
+      Archive --> Worker[Frame indexing worker]
+      Worker --> SQLite
       Relay --> SQLite[(SQLite history)]
       Relay --> Static[React static application]
       Tunnel[cloudflared] --> Relay
@@ -57,6 +63,7 @@ flowchart LR
       R[local.airplanes-live.readsb]
       W[local.antenna-observatory.web]
       U[local.antenna-observatory.uplink]
+      F[local.antenna-observatory.frames]
       K[local.antenna-observatory.keepawake]
     end
     subgraph linux[Linux user processes]
@@ -64,6 +71,7 @@ flowchart LR
       ST[tunnel supervisor] --> TP[cloudflared]
     end
     R --> W --> U --> RP
+    R --> F --> RP
     K -. prevents idle sleep .-> R
     TP --> RP
 ```
@@ -113,6 +121,18 @@ erDiagram
       text level
       text message
     }
+    BEAST_BATCH {
+      string sha256 PK
+      real capture_start
+      real capture_end
+      string status
+    }
+    BEAST_FRAME {
+      string batch_sha FK
+      int ordinal
+      real ts
+      blob payload
+    }
     SNAPSHOT {
       real now
       string state
@@ -124,6 +144,7 @@ erDiagram
     }
     SNAPSHOT ||--o{ SAMPLE : summarized_into
     SNAPSHOT ||--o{ EVENT : emits
+    BEAST_BATCH ||--o{ BEAST_FRAME : contains
 ```
 
-Samples and events use seven-day rolling retention. The latest relay snapshot and a bounded decoder-log tail are also persisted so a relay restart can recover the last known view.
+Samples and events use seven-day rolling retention. Successfully processed Beast batches and their per-frame indexes use 72-hour rolling retention; failed batches remain available for diagnosis. The latest relay snapshot and a bounded decoder-log tail are also persisted so a relay restart can recover the last known view.

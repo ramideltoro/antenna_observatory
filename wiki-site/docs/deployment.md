@@ -2,6 +2,8 @@
 
 Every production change follows the same source-to-release path. The tested artifact is the artifact deployed; the remote host does not install Node dependencies or rebuild source.
 
+The Linux relay requires `zstd` on `PATH`. Deployment checks this prerequisite before changing the active release so a missing decoder cannot replace a healthy production version.
+
 ## Pipeline
 
 ```mermaid

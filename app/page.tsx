@@ -136,11 +136,17 @@ const time = (v: unknown) =>
 const age = (s: unknown) =>
   typeof s !== 'number' || !Number.isFinite(s)
     ? '—'
-    : s < 60
-      ? `${Math.floor(s)}s`
-      : s < 3600
-        ? `${Math.floor(s / 60)}m ${Math.floor(s % 60)}s`
-        : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+    : Math.max(0, s) < 60
+      ? `${Math.floor(Math.max(0, s))}s`
+      : Math.max(0, s) < 3600
+        ? `${Math.floor(Math.max(0, s) / 60)}m ${Math.floor(Math.max(0, s) % 60)}s`
+        : `${Math.floor(Math.max(0, s) / 3600)}h ${Math.floor((Math.max(0, s) % 3600) / 60)}m`;
+const bytes = (v: unknown) =>
+  typeof v !== 'number' || !Number.isFinite(v)
+    ? '—'
+    : v < 1024 * 1024
+      ? `${(v / 1024).toFixed(1)} KiB`
+      : `${(v / (1024 * 1024)).toFixed(1)} MiB`;
 function Stat({
   label,
   value,
@@ -889,6 +895,7 @@ export default function Home() {
   }, [navigate]);
   const d: Partial<Snapshot> = data || {},
     m = d.metrics || {},
+    pipeline = d.frame_pipeline || {},
     live = !error && d.state === 'live',
     sourceAges = d.age_seconds,
     isStale = !!error || d.state === 'stale';
@@ -938,6 +945,11 @@ export default function Home() {
   if (live && d.host?.feed_connected === false)
     alerts.push(
       'Aircraft reception is live, but the airplanes.live connection is down.',
+    );
+  if (pipeline.state === 'error')
+    alerts.push(
+      pipeline.last_error ||
+        'The decoded-frame archive needs attention. Check the Feed view.',
     );
   if ((m.samples_dropped ?? 0) > 0)
     alerts.push(
@@ -1734,6 +1746,40 @@ export default function Home() {
                 </p>
               </Panel>
             </div>
+            <Panel
+              title="Backend frame archive"
+              note="Two-minute Zstandard batches · 72-hour detailed retention"
+              className="spaced"
+            >
+              <Rows
+                rows={[
+                  ['Pipeline', pipeline.state || 'Waiting'],
+                  ['Pending batches', fmt(pipeline.pending_batches)],
+                  ['Local spool', bytes(pipeline.spool_bytes)],
+                  ['Oldest pending', age(pipeline.oldest_pending_age_s)],
+                  [
+                    'Last captured',
+                    pipeline.last_captured_at
+                      ? `${age(Number(d.now) - pipeline.last_captured_at)} ago`
+                      : '—',
+                  ],
+                  [
+                    'Last uploaded',
+                    pipeline.last_uploaded_at
+                      ? `${age(Number(d.now) - pipeline.last_uploaded_at)} ago`
+                      : '—',
+                  ],
+                  [
+                    'Last processed',
+                    pipeline.last_processed_at
+                      ? `${age(Number(d.now) - pipeline.last_processed_at)} ago`
+                      : '—',
+                  ],
+                  ['Failed batches', fmt(pipeline.failed_batches)],
+                  ['Recorded gaps', fmt(pipeline.gap_count)],
+                ]}
+              />
+            </Panel>
           </>
         )}
         {view === 'history' && (
