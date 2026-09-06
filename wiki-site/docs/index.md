@@ -48,6 +48,14 @@ flowchart LR
 
   [:octicons-arrow-right-24: Dashboard guide](dashboard.md)
 
+- :material-chart-areaspline:{ .lg .middle } **Explore receiver intelligence**
+
+  ***
+
+  Compare polar coverage, replay flights, search encounters, read daily reports, and interpret smart alerts.
+
+  [:octicons-arrow-right-24: Intelligence features](intelligence.md)
+
 - :material-lan:{ .lg .middle } **Operate the system**
 
   ***
@@ -71,7 +79,7 @@ Skyglow uses the receiver as a multi-band observatory for aircraft, replay, airb
 | ------------------------------- | ----------------------------------------------------------------------------------------- |
 | Keep radio work local           | The USB receiver and `readsb` remain on the Mac.                                          |
 | Keep airplanes.live independent | `readsb` connects directly to the feed destination.                                       |
-| Make history available anywhere | The relay stores a seven-day rolling sample history.                                      |
+| Make history available anywhere | The relay stores seven days of samples, tracks, encounters, events, and reports.          |
 | Protect receiver controls       | Read views are public; ingest uses a bearer token and settings remain local-only.         |
 | Recover automatically           | LaunchAgents, a keep-awake service, and the Linux supervisor restart failed processes.    |
 | Ship safely                     | CI scans, tests, builds, budgets, deploys atomically, verifies, and can roll back.        |

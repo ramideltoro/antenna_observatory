@@ -26,6 +26,7 @@ sequenceDiagram
       Collector-->>Uploader: Snapshot and bounded log tail
       Uploader->>Relay: POST /api/ingest with bearer token
       Relay->>Relay: Validate, sanitize, and persist
+      Relay->>Relay: Update tracks, encounters, health, and alerts
     end
     loop Oldest completed batch first
       Frames->>Frames: Validate and claim into durable spool
@@ -110,3 +111,5 @@ stateDiagram-v2
 ```
 
 Charts downsample long ranges to at most roughly 480 plotted points. Buckets containing stale data or gaps over 30 seconds retain a gap in reception-dependent series.
+
+Track replay changes resolution with the requested range: ten seconds for one hour, twenty seconds for six hours, one minute for one day, and five minutes for seven days. Coverage uses 72 five-degree sectors. Encounter sessions increment only after a target has been absent for more than 15 minutes.

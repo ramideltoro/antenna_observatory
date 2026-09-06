@@ -63,6 +63,15 @@ class ProtocolTests(unittest.TestCase):
         for value in invalid:
             with self.assertRaises(ValueError): app.validated_public_origin(value)
 
+    def test_mobile_pwa_metadata_has_no_offline_telemetry_cache(self):
+        root = Path(__file__).resolve().parent.parent
+        manifest = json.loads((root / 'public/manifest.webmanifest').read_text())
+        self.assertEqual(manifest['display'], 'standalone')
+        self.assertEqual({icon['sizes'] for icon in manifest['icons']}, {'192x192', '512x512'})
+        worker = (root / 'public/sw.js').read_text()
+        self.assertNotIn("addEventListener('fetch'", worker)
+        self.assertNotIn('caches.open', worker)
+
 
 class TelemetryTests(unittest.TestCase):
     def setUp(self):
@@ -119,11 +128,20 @@ class TelemetryTests(unittest.TestCase):
             with urllib.request.urlopen(urllib.request.Request(base + '/api/settings', data=json.dumps(settings).encode(), headers={'Origin': base})) as response:
                 self.assertEqual(response.status, 200)
             self.assertEqual(json.loads(app.CONFIG.read_text()), settings); self.assertEqual(stat.S_IMODE(app.CONFIG.stat().st_mode), 0o600)
+            maintenance = json.dumps({'title': 'Integration check', 'details': 'Local API', 'category': 'software'}).encode()
+            with urllib.request.urlopen(urllib.request.Request(base + '/api/maintenance', data=maintenance, headers={'Origin': base, 'Content-Type': 'application/json'})) as response:
+                self.assertEqual(response.status, 200)
+            for path, key in (('/api/coverage?hours=1', 'bands'), ('/api/replay?hours=1', 'points'), ('/api/encounters', 'encounters'), ('/api/reports', 'reports'), ('/api/lab?hours=1', 'rssi'), ('/api/maintenance', 'entries'), ('/api/spectrum', 'lines')):
+                with urllib.request.urlopen(base + path) as response:
+                    self.assertIn(key, json.load(response), path)
             server.public_origin = 'https://antenna.ramideltoro.com'
             with urllib.request.urlopen(urllib.request.Request(base + '/api/health', headers={'Host': 'antenna.ramideltoro.com'})) as response:
                 self.assertEqual(response.status, 200)
             with self.assertRaises(urllib.error.HTTPError) as error:
                 urllib.request.urlopen(urllib.request.Request(base + '/api/settings', data=json.dumps(settings).encode(), headers={'Host': 'antenna.ramideltoro.com', 'Origin': server.public_origin}))
+            self.assertEqual(error.exception.code, 403)
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(urllib.request.Request(base + '/api/maintenance', data=maintenance, headers={'Host': 'antenna.ramideltoro.com', 'Origin': server.public_origin, 'Content-Type': 'application/json'}))
             self.assertEqual(error.exception.code, 403)
             for host, editable in [('antenna.ramideltoro.com', False), ('127.0.0.1:' + str(server.server_port), True)]:
                 with urllib.request.urlopen(urllib.request.Request(base + '/api/snapshot', headers={'Host': host})) as response:
@@ -146,7 +164,7 @@ class RelayTests(unittest.TestCase):
         self.server.shutdown(); self.server.server_close(); self.thread.join(); self.obs.close(); self.patch.stop(); self.temp.cleanup()
 
     def envelope(self):
-        return {'snapshot': {'now': time.time(), 'source_time': time.time(), 'state': 'live', 'metrics': {'aircraft': 1, 'message_rate': 2}, 'aircraft': [], 'signals': [{'name': 'ADS-B', 'rate': 2}], 'events': [], 'host': {'feed_connected': True}, 'hardware': {}}, 'logs': ['decoder running']}
+        return {'snapshot': {'now': time.time(), 'source_time': time.time(), 'state': 'live', 'metrics': {'aircraft': 1, 'message_rate': 2}, 'aircraft': [], 'signals': [{'name': 'ADS-B', 'rate': 2}], 'events': [], 'host': {'feed_connected': True}, 'hardware': {}, 'maintenance_entries': [{'id': 1, 'ts': time.time(), 'title': 'Antenna moved', 'details': 'Window test', 'category': 'antenna'}]}, 'logs': ['decoder running']}
 
     def post(self, token='t' * 48, body=None):
         connection = http.client.HTTPConnection('127.0.0.1', self.server.server_port, timeout=5)
@@ -172,6 +190,7 @@ class RelayTests(unittest.TestCase):
         snapshot = self.obs.snapshot(); self.assertEqual(snapshot['state'], 'live'); self.assertEqual(snapshot['metrics']['aircraft'], 1)
         self.assertEqual(self.obs.logs(), ['decoder running']); self.assertEqual(len(self.obs.history(1)['points']), 1)
         self.assertTrue((app.STATE / 'relay-latest.json').is_file())
+        self.assertEqual(app.intelligence.list_maintenance(self.obs.db)['entries'][0]['title'], 'Antenna moved')
 
     def test_stale_relay_marks_aircraft_inactive(self):
         envelope = self.envelope(); envelope['snapshot']['aircraft'] = [{'hex': 'abc123', 'live': True}]
@@ -268,6 +287,8 @@ class PublicAccessTests(unittest.TestCase):
     def test_writes_stay_local_and_origin_bound(self):
         settings = json.dumps({'station_name': 'Public station', 'latitude': 28, 'longitude': -82})
         self.assertEqual(self.request('/api/settings', 'POST', settings, self.origin)[0], 403)
+        maintenance = json.dumps({'title': 'Remote change', 'details': '', 'category': 'note'})
+        self.assertEqual(self.request('/api/maintenance', 'POST', maintenance, self.origin)[0], 403)
         self.assertEqual(self.request('/api/settings', 'POST', settings, 'https://foreign.example')[0], 403)
         local_host = '127.0.0.1:' + str(self.server.server_port); local_origin = 'http://' + local_host
         self.assertEqual(self.request('/api/settings', 'POST', settings, local_origin, local_host)[0], 200)

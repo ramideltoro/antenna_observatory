@@ -9,6 +9,14 @@ The browser uses same-origin HTTP endpoints. Read endpoints are public and requi
 | GET    | `/login`                     | Public                        | Redirect legacy bookmarks to `/`                                    |
 | GET    | `/api/snapshot`              | Public                        | Latest aircraft, signals, metrics, events, host, and hardware state |
 | GET    | `/api/history?hours=1`       | Public                        | One to 168 hours of downsampled stored measurements                 |
+| GET    | `/api/coverage?hours=24`     | Public                        | Polar range bins for all and three altitude bands                   |
+| GET    | `/api/replay?hours=6`        | Public                        | Time-bucketed historical aircraft track points                      |
+| GET    | `/api/encounters?limit=250`  | Public                        | Seven-day aircraft encounter rollups                                |
+| GET    | `/api/reports?days=7`        | Public                        | Daily reception and availability scorecards                         |
+| GET    | `/api/lab?hours=24`          | Public                        | Signal, altitude, and range distributions with baselines            |
+| GET    | `/api/maintenance`           | Public                        | Maintenance annotations synchronized from the Mac                   |
+| POST   | `/api/maintenance`           | Local loopback + local origin | Add or delete a maintenance annotation                              |
+| GET    | `/api/spectrum`              | Public                        | Optional second-SDR waterfall state                                 |
 | GET    | `/api/logs`                  | Public                        | Bounded decoder log tail                                            |
 | GET    | `/api/export`                | Public                        | Aircraft snapshot as CSV                                            |
 | GET    | `/api/health`                | Public                        | Application health and collector start time                         |
@@ -30,6 +38,8 @@ classDiagram
       Aircraft[] aircraft
       Signal[] signals
       Event[] events
+      HealthScore health_score
+      SmartAlert[] smart_alerts
       Host host
       Hardware hardware
     }
@@ -55,6 +65,8 @@ classDiagram
     }
     Snapshot --> Metrics
     Snapshot --> Aircraft
+    Snapshot --> HealthScore
+    Snapshot --> SmartAlert
 ```
 
 Unknown values are represented as JSON `null` or absent source fields. Consumers must not interpret a missing measurement as zero.
@@ -63,12 +75,14 @@ Unknown values are represented as JSON `null` or absent source fields. Consumers
 
 Beast uploads use `Content-Type: application/zstd`, have a 16 MiB compressed-body limit, and are safe to retry. Repeating an accepted hash returns success without inserting duplicate frames.
 
+Analytics ranges are clamped server-side. Replay returns no more than 25,000 compressed points, encounter queries return no more than 1,000 rows, and maintenance text has strict size and category validation. Maintenance changes are accepted only on the Mac's loopback dashboard and are mirrored to the hosted relay by the protected telemetry uplink.
+
 ## Error behavior
 
-| Status | Meaning                                                    |
-| -----: | ---------------------------------------------------------- |
-|    303 | Legacy `/login` redirect back to the application           |
-|    400 | Invalid request size, shape, range, or encoding            |
-|    401 | Missing or invalid relay token                             |
-|    403 | Invalid hostname/origin/path or remote-only setting change |
-|    404 | Unknown endpoint or unavailable static asset               |
+| Status | Meaning                                              |
+| -----: | ---------------------------------------------------- |
+|    303 | Legacy `/login` redirect back to the application     |
+|    400 | Invalid request size, shape, range, or encoding      |
+|    401 | Missing or invalid relay token                       |
+|    403 | Invalid hostname/origin/path or remote write attempt |
+|    404 | Unknown endpoint or unavailable static asset         |

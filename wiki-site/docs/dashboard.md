@@ -23,6 +23,18 @@ mindmap
       Sort
       Details
       CSV export
+    Coverage
+      Polar envelope
+      Altitude bands
+      Direction sectors
+    Time machine
+      Track replay
+      Timeline
+      Playback speed
+    Encounters
+      Seven-day sightings
+      Favorites
+      Range and signal records
     Receiver
       RF power
       Decode quality
@@ -37,10 +49,16 @@ mindmap
       6 hours
       24 hours
       7 days
+    Analysis
+      Daily reports
+      Signal laboratory
+      Spectrum
     Diagnostics
+      Smart alerts
       Events
       Logs
       Inspector
+      Maintenance
     Station
       Identity
       Coordinates
@@ -77,6 +95,18 @@ Receiver values have different meanings:
 ## History
 
 Charts display real stored samples. Missing or stale periods remain visible as gaps. Click or tap legend labels to isolate series; change the range without leaving the page.
+
+## Receiver intelligence
+
+The observatory stores one compact position per active aircraft every ten seconds. These real observations power the Coverage, Time machine, Encounters, Daily reports, and Signal lab views. New history begins after this feature is deployed; the interface never invents older tracks.
+
+The overview health score combines four independently visible components: service availability, radio margin, decoder quality, and reception activity. Smart alerts compare current measurements with a six-hour median and clear automatically when the condition recovers.
+
+See [Receiver intelligence](intelligence.md) for formulas, diagrams, retention, and interpretation.
+
+## Mobile app
+
+The Station page can install Antenna Observatory as a progressive web app. Its network-only service worker stores no telemetry, API responses, or HTML, so every displayed measurement comes from the live site.
 
 ## Inspector
 

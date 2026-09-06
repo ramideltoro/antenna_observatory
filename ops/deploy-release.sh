@@ -27,7 +27,7 @@ if [ ! -d "$release" ]; then
   tar -xzf "$archive" -C "$release"
 fi
 
-for required in dist/client/index.html server/observatory.py ops/servercheap-supervisor.py; do
+for required in dist/client/index.html server/observatory.py server/intelligence.py ops/servercheap-supervisor.py; do
   [ -f "$release/$required" ] || { echo "release is missing $required" >&2; exit 1; }
 done
 

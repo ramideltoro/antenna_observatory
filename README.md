@@ -7,7 +7,7 @@ Antenna Observatory is a public, amber-themed dashboard for a 1090 MHz aircraft 
 
 Open the dashboard at **[antenna.ramideltoro.com](https://antenna.ramideltoro.com)**. Live views and read APIs are open without an account; telemetry ingestion and station changes remain protected.
 
-The dashboard includes aircraft, ADS-B and Mode S signal families, receiver health, airplanes.live connection state, history, events, raw telemetry, and station settings. It is designed for phones, tablets, and desktops.
+The dashboard includes live aircraft and signal families, a historical polar coverage map, flight replay, aircraft encounters, daily reports, signal distributions, a 0–100 antenna health score, smart alerts, maintenance annotations, receiver diagnostics, and an optional second-SDR spectrum waterfall. It installs as a mobile web app and is designed for phones, tablets, and desktops.
 
 Read the **[Antenna Observatory wiki](https://wiki.antenna.ramideltoro.com)** for architecture diagrams, the full Mac installation, signal definitions, operations, troubleshooting, security, API behavior, and the CI/CD pipeline. The related [Skyglow wiki](https://wiki.skyglow.ramideltoro.com) documents the multi-band receiver project.
 
