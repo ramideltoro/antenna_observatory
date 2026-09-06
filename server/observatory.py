@@ -5,6 +5,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
+import intelligence
+
 ROOT = Path(__file__).resolve().parent.parent
 STATE = Path(os.environ.get('ANTENNA_STATE_DIR', Path.home() / 'Library/Application Support/AntennaObservatory/state'))
 DATA = STATE / 'readsb'
@@ -188,12 +190,14 @@ class Observatory:
         self.df_family=collections.Counter()
         self.events=collections.deque(maxlen=250); self.snap={}; self.host={}; self.beast_connected=False
         self.feed_connected=None; self.previous=None; self.last_persist=0; self.last_health=0
+        self.active_alert_codes=set()
         self.settings=read_json(CONFIG, {'station_name':'Rami’s receiver','latitude':None,'longitude':None})
         self.db=sqlite3.connect(DB,check_same_thread=False)
         self.db.execute('PRAGMA journal_mode=WAL'); self.db.execute('PRAGMA busy_timeout=5000')
         self.db.execute('CREATE TABLE IF NOT EXISTS samples (ts REAL PRIMARY KEY, payload TEXT NOT NULL)')
         self.db.execute('CREATE TABLE IF NOT EXISTS events (ts REAL NOT NULL, level TEXT NOT NULL, message TEXT NOT NULL)')
         self.db.execute('CREATE INDEX IF NOT EXISTS events_ts ON events(ts)')
+        intelligence.initialize(self.db)
         self.db.commit()
         for t,l,m in self.db.execute('SELECT ts,level,message FROM events ORDER BY ts DESC LIMIT 150').fetchall()[::-1]: self.events.append({'time':t,'level':l,'message':m})
         self.event('info','Observatory collector started')
@@ -309,16 +313,30 @@ class Observatory:
             state='live' if fresh else 'stale' if timestamp else 'waiting'
             old=self.snap.get('state')
             if old and state!=old: self.event('success' if fresh else 'warning','Receiver telemetry live' if fresh else 'Receiver telemetry stopped updating')
+            spectrum=read_json(STATE/'spectrum/latest.json',{})
+            if isinstance(spectrum,dict) and spectrum:
+                updated=spectrum.get('updated_at')
+                spectrum['available']=bool(spectrum.get('lines')) and isinstance(updated,(int,float)) and now-updated<30
+                spectrum['age_seconds']=max(0,now-updated) if isinstance(updated,(int,float)) else None
             self.snap={'now':now,'state':state,'source_time':timestamp,'age_seconds':age,'stats_age_seconds':now-stats.get('now',0) if stats.get('now') else None,
               'collector_started':self.started,'decoder_started':total.get('start'),'settings':settings,'metrics':metrics,'aircraft':aircraft,'signals':signals,
               'formats':[{'df':k,'name':DF_NAMES.get(k,'Other format'),'count':v,'last60':recent_df[k], 'families':{f:self.df_family[(k,f)] for f in FAMILIES}, 'last60_by_family':{f:recent_df_family[(k,f)] for f in FAMILIES}} for k,v in sorted(self.df.items())],
               'type_codes':[{'code':k,'name':TYPE_NAMES.get(k,'Reserved / other'),'count':v} for k,v in sorted(self.tc.items())],
               'recent_frames':list(self.recent),'events':list(reversed(self.events))[:100], 'host':self.host,'beast_connected':self.beast_connected,
-              'receiver':receiver,'stats':stats,'raw_aircraft':raw,'frame_pipeline':frame_pipeline,
+              'receiver':receiver,'stats':stats,'raw_aircraft':raw,'frame_pipeline':frame_pipeline,'spectrum':spectrum,
+              'maintenance_entries':intelligence.list_maintenance(self.db)['entries'],
               'hardware':{'model':DEVICE_MODEL,'serial':DEVICE_SERIAL,'tuner':'Rafael Micro R820T','frequency_mhz':1090,'sample_rate_msps':2.4,'feeder_id':FEEDER_ID,'mlat_configured':False,'modeac_enabled':True}}
+            intelligence.enrich_snapshot(self.db,self.snap)
+            new_alerts={alert['code'] for alert in self.snap['smart_alerts']}
+            for alert in self.snap['smart_alerts']:
+                if alert['code'] not in self.active_alert_codes: self.event(alert['severity'],alert['title']+': '+alert['message'])
+            for code in self.active_alert_codes-new_alerts: self.event('success','Alert cleared: '+code.replace('-',' '))
+            self.active_alert_codes=new_alerts
+            self.snap['events']=list(reversed(self.events))[:100]
             if now-self.last_persist>=10:
-                sample=dict(metrics,ts=now,signals={s['name']:s['rate'] for s in signals},state=state)
+                sample=dict(metrics,ts=now,signals={s['name']:s['rate'] for s in signals},state=state,health_score=self.snap['health_score']['score'])
                 self.db.execute('INSERT OR REPLACE INTO samples VALUES (?,?)',(now,json.dumps(sample,allow_nan=False)))
+                intelligence.persist_snapshot(self.db,now,self.snap)
                 self.db.execute('DELETE FROM samples WHERE ts < ?',(now-7*86400,)); self.db.execute('DELETE FROM events WHERE ts < ?',(now-7*86400,)); self.db.commit(); self.last_persist=now
     def snapshot(self):
         with self.lock:
@@ -326,6 +344,7 @@ class Observatory:
             if time.time()-snap.get('now',0)>10:
                 snap['state']='stale'
             if snap.get('source_time'): snap['age_seconds']=max(0,time.time()-snap['source_time'])
+            intelligence.enrich_snapshot(self.db,snap)
             return snap
     def history(self,hours):
         with self.lock:
@@ -377,6 +396,7 @@ class RelayObservatory:
           FOREIGN KEY(batch_sha) REFERENCES beast_batches(sha256) ON DELETE CASCADE)''')
         self.db.execute('CREATE INDEX IF NOT EXISTS beast_frames_ts ON beast_frames(ts)')
         self.db.execute('CREATE INDEX IF NOT EXISTS beast_frames_family_ts ON beast_frames(family,ts)')
+        intelligence.initialize(self.db)
         self.db.execute("UPDATE beast_batches SET status='pending',error=NULL WHERE status='processing'");self.db.commit()
         self.recover_batches()
         self.worker=threading.Thread(target=self.worker_loop,name='beast-batch-worker',daemon=True);self.worker.start()
@@ -476,18 +496,22 @@ class RelayObservatory:
         snap=envelope['snapshot']; required=('now','state','metrics','aircraft','signals','events','host','hardware')
         if any(key not in snap for key in required): raise ValueError('Incomplete telemetry snapshot')
         if not isinstance(snap['now'],(int,float)) or not math.isfinite(snap['now']): raise ValueError('Invalid telemetry timestamp')
-        if not all(isinstance(snap.get(key),list) for key in ('aircraft','signals','events')) or not isinstance(snap.get('metrics'),dict): raise ValueError('Invalid telemetry collections')
+        if not all(isinstance(snap.get(key),list) for key in ('aircraft','signals','events')) or not all(isinstance(snap.get(key),dict) for key in ('metrics','host','hardware')): raise ValueError('Invalid telemetry collections')
         logs=envelope.get('logs',[])
         if not isinstance(logs,list) or any(not isinstance(line,str) for line in logs): raise ValueError('Invalid decoder logs')
         now=time.time();copy=json.loads(json.dumps(snap,allow_nan=False));copy['relay_received_at']=now
         safe_logs=[line[-2000:] for line in logs[-150:]]
         with self.lock:
+            if 'maintenance_entries' in copy and copy['maintenance_entries']!=self.latest.get('maintenance_entries'):
+                intelligence.sync_maintenance(self.db,copy['maintenance_entries'])
+            intelligence.enrich_snapshot(self.db,copy)
             self.latest=copy;self.log_lines=safe_logs;self.received_at=now
             for path,value in ((STATE/'relay-latest.json',copy),(STATE/'relay-logs.json',safe_logs)):
                 tmp=path.with_suffix('.tmp');tmp.write_text(json.dumps(value,allow_nan=False));tmp.replace(path)
             if now-self.last_persist>=10:
                 metrics=dict(copy.get('metrics',{}));metrics.update(ts=now,signals={s.get('name'):s.get('rate') for s in copy.get('signals',[])},state=copy.get('state'))
                 self.db.execute('INSERT OR REPLACE INTO samples VALUES (?,?)',(now,json.dumps(metrics,allow_nan=False)))
+                intelligence.persist_snapshot(self.db,now,copy)
                 self.db.execute('DELETE FROM samples WHERE ts < ?',(now-7*86400,));self.db.commit();self.last_persist=now
         return {'accepted':True,'received_at':now}
     def snapshot(self):
@@ -505,6 +529,7 @@ class RelayObservatory:
         pipeline=dict(local);pipeline.update(server);pipeline['pending_batches']=local_pending+server_pending;pipeline['oldest_pending_age_s']=max(oldest) if oldest else None
         pipeline['state']='error' if pipeline.get('gap_count',0) or pipeline.get('failed_batches',0) else 'backlogged' if pipeline['pending_batches'] else 'live' if pipeline.get('last_processed_at') else 'waiting'
         snap['frame_pipeline']=pipeline
+        with self.lock:intelligence.enrich_snapshot(self.db,snap)
         return snap
     def history(self,hours): return Observatory.history(self,hours)
     def logs(self):
@@ -577,6 +602,15 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(200,self.server.obs.ingest_beast(digest,self.rfile.read(length)))
         except (ValueError,TypeError,UnicodeError) as e:return self.respond(400,{'error':str(e)})
         except RuntimeError as e:return self.respond(503,{'error':str(e)})
+    def query_number(self,parsed,name,default,minimum,maximum):
+        try:
+            value=float(parse_qs(parsed.query).get(name,[str(default)])[0])
+            if not math.isfinite(value): raise ValueError()
+            return min(maximum,max(minimum,value))
+        except (ValueError,TypeError): raise ValueError('Invalid '+name)
+    def intelligence_response(self,callback,*args):
+        with self.server.obs.lock:
+            return self.respond(200,callback(self.server.obs.db,*args))
     def redirect(self, location, headers=None):
         return self.respond(303, '', 'text/html; charset=utf-8', dict(headers or {}, Location=location))
     def do_GET(self):
@@ -592,7 +626,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.redirect('/')
         if path=='/api/snapshot':
             snap=self.server.obs.snapshot()
-            snap['settings_editable']=urlparse('//'+self.headers.get('Host','')).hostname in ('127.0.0.1','localhost')
+            snap['settings_editable']=self.local_loopback()
             return self.respond(200,snap)
         if path=='/api/history':
             try:
@@ -601,6 +635,19 @@ class Handler(BaseHTTPRequestHandler):
                 hours=min(168,max(1,hours))
             except ValueError: return self.respond(400,{'error':'Invalid time range'})
             return self.respond(200,self.server.obs.history(hours))
+        try:
+            if path=='/api/coverage': return self.intelligence_response(intelligence.coverage,self.query_number(parsed,'hours',24,1,168))
+            if path=='/api/replay': return self.intelligence_response(intelligence.replay,self.query_number(parsed,'hours',6,1,168))
+            if path=='/api/encounters': return self.intelligence_response(intelligence.encounters,int(self.query_number(parsed,'limit',250,1,1000)))
+            if path=='/api/reports': return self.intelligence_response(intelligence.daily_reports,int(self.query_number(parsed,'days',7,1,7)))
+            if path=='/api/lab':
+                hours=self.query_number(parsed,'hours',24,1,168)
+                with self.server.obs.lock:
+                    snapshot=self.server.obs.snapshot()
+                    return self.respond(200,intelligence.signal_lab(self.server.obs.db,snapshot,hours))
+            if path=='/api/maintenance': return self.intelligence_response(intelligence.list_maintenance)
+            if path=='/api/spectrum': return self.respond(200,intelligence.spectrum_status(self.server.obs.snapshot()))
+        except ValueError as error: return self.respond(400,{'error':str(error)})
         if path=='/api/logs': return self.respond(200,{'lines':self.server.obs.logs()})
         if path=='/api/export':
             snap=self.server.obs.snapshot(); out=io.StringIO(); keys=['hex','flight','family','alt_baro','gs','track','lat','lon','rssi','messages','seen','distance_nm']
@@ -621,13 +668,32 @@ class Handler(BaseHTTPRequestHandler):
         return self.respond(200,target.read_bytes(),kind,{'Cache-Control':cache})
     def do_POST(self):
         if not self.valid_host(): return self.respond(403,{'error':'Unrecognized dashboard hostname'})
-        if urlparse(self.path).path=='/api/ingest': return self.relay_ingest()
+        path=urlparse(self.path).path
+        if path=='/api/ingest': return self.relay_ingest()
         if not self.valid_origin(): return self.respond(403,{'error':'Matching dashboard origin required'})
         if self.request_origin().startswith('https:') and self.headers.get('X-Forwarded-Proto') == 'http':
             return self.respond(403, {'error': 'HTTPS required'})
-        if urlparse('//'+self.headers.get('Host','')).hostname not in ('127.0.0.1','localhost'):
+        if path=='/api/maintenance':
+            if not self.local_loopback():
+                return self.respond(403,{'error':'Maintenance can only be changed from the local dashboard on this Mac.'})
+            try:
+                length=int(self.headers.get('Content-Length','0'))
+                if not 0<length<=8192 or self.headers.get('Content-Type','').split(';')[0]!='application/json': raise ValueError('Invalid maintenance request')
+                body=json.loads(self.rfile.read(length))
+                if not isinstance(body,dict): raise ValueError('Expected a maintenance object')
+                with self.server.obs.lock:
+                    if body.get('action')=='delete':
+                        result=intelligence.delete_maintenance(self.server.obs.db,body.get('id'))
+                        message='Maintenance annotation deleted'
+                    else:
+                        result=intelligence.add_maintenance(self.server.obs.db,body)
+                        message='Maintenance annotation added: '+result['title']
+                self.server.obs.event('info',message)
+                return self.respond(200,result)
+            except (ValueError,TypeError,KeyError) as error: return self.respond(400,{'error':str(error)})
+        if not self.local_loopback():
             return self.respond(403,{'error':'Station settings can only be changed from the local dashboard on this Mac.'})
-        if urlparse(self.path).path!='/api/settings': return self.respond(404,{'error':'Unknown endpoint'})
+        if path!='/api/settings': return self.respond(404,{'error':'Unknown endpoint'})
         try:
             length=int(self.headers.get('Content-Length','0'))
             if not 0<length<=4096: raise ValueError('Invalid request size')

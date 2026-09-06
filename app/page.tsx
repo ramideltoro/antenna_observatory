@@ -43,6 +43,14 @@ import {
   ExternalLink,
   Menu,
   ChevronRight,
+  Compass,
+  PlayCircle,
+  Radar,
+  CalendarDays,
+  FlaskConical,
+  Wrench,
+  Waves,
+  BellRing,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -64,9 +72,11 @@ import {
   SheetTitle,
   SheetDescription,
 } from '@/components/ui/sheet';
+import { HealthSummary, PwaControls } from '@/components/operations-panels';
 
 type LocatedAircraft = Aircraft & { lat: number; lon: number };
 const SignalChart = lazy(() => import('@/components/signal-chart'));
+const IntelligenceViews = lazy(() => import('@/components/intelligence-views'));
 import type { ChartProps } from '@/components/signal-chart';
 const COLORS: Record<string, string> = {
   'ADS-B': '#ffbb45',
@@ -85,10 +95,18 @@ const VIEWS = [
   ['overview', 'Overview', Activity],
   ['signals', 'Signals', Radio],
   ['aircraft', 'Aircraft', Plane],
+  ['coverage', 'Coverage', Compass],
+  ['replay', 'Time machine', PlayCircle],
+  ['encounters', 'Encounters', Radar],
   ['receiver', 'Receiver', Cpu],
   ['feed', 'Feed', Wifi],
   ['history', 'History', History],
+  ['reports', 'Daily reports', CalendarDays],
+  ['laboratory', 'Signal lab', FlaskConical],
+  ['spectrum', 'Spectrum', Waves],
+  ['alerts', 'Smart alerts', BellRing],
   ['events', 'Events', Terminal],
+  ['maintenance', 'Maintenance', Wrench],
   ['inspector', 'Inspector', Braces],
   ['station', 'Station', Settings2],
 ] as const;
@@ -96,13 +114,47 @@ const TITLES: Record<string, string> = {
   overview: 'Receiver overview',
   signals: 'Signal intelligence',
   aircraft: 'Aircraft in range',
+  coverage: 'Historical coverage',
+  replay: 'Flight time machine',
+  encounters: 'Aircraft encounters',
   receiver: 'Receiver health',
   feed: 'Feed connection',
   history: 'Reception history',
+  reports: 'Daily reception reports',
+  laboratory: 'Signal laboratory',
+  spectrum: 'Spectrum waterfall',
+  alerts: 'Smart alerts',
   events: 'Events & diagnostics',
+  maintenance: 'Maintenance annotations',
   inspector: 'Telemetry inspector',
   station: 'Your station',
 };
+const NAV_GROUPS = [
+  ['Observe', ['overview', 'aircraft', 'signals', 'coverage', 'replay']],
+  ['Analyze', ['history', 'encounters', 'reports', 'laboratory', 'spectrum']],
+  [
+    'Operate',
+    [
+      'receiver',
+      'feed',
+      'alerts',
+      'events',
+      'maintenance',
+      'inspector',
+      'station',
+    ],
+  ],
+] as const;
+const INTELLIGENCE_VIEWS = [
+  'coverage',
+  'replay',
+  'encounters',
+  'reports',
+  'laboratory',
+  'spectrum',
+  'alerts',
+  'maintenance',
+];
 const DESCRIPTIONS: Record<string, string> = {
   'ADS-B': 'Aircraft broadcasting identity, position, velocity, and status.',
   'Mode S':
@@ -256,19 +308,47 @@ function Choice({
   );
 }
 function Chart(props: ChartProps) {
+  const container = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const target = container.current;
+    if (!target) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '160px' },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, []);
   return (
-    <Suspense
-      fallback={
+    <div ref={container} className="deferred-chart">
+      {visible ? (
+        <Suspense
+          fallback={
+            <div
+              className="chart-loading"
+              style={{ minHeight: (props.height ?? 224) + 90 }}
+            >
+              Loading reception chart…
+            </div>
+          }
+        >
+          <SignalChart {...props} />
+        </Suspense>
+      ) : (
         <div
           className="chart-loading"
           style={{ minHeight: (props.height ?? 224) + 90 }}
         >
-          Loading reception chart…
+          Reception chart loads as it enters view.
         </div>
-      }
-    >
-      <SignalChart {...props} />
-    </Suspense>
+      )}
+    </div>
   );
 }
 function FamilyBars({
@@ -1015,17 +1095,29 @@ export default function Home() {
                 <SheetDescription>Explore your station</SheetDescription>
               </SheetHeader>
               <nav aria-label="Dashboard sections" className="more-sections">
-                {VIEWS.map(([value, label, Icon]) => (
-                  <button
-                    type="button"
-                    key={value}
-                    onClick={() => navigate(value)}
-                    aria-current={view === value ? 'page' : undefined}
-                  >
-                    <Icon size={21} />
-                    <span>{label}</span>
-                    <ChevronRight size={18} />
-                  </button>
+                {NAV_GROUPS.map(([group, values]) => (
+                  <div className="navigation-group" key={group}>
+                    <span>{group}</span>
+                    {values.map((value) => {
+                      const item = VIEWS.find(
+                        (candidate) => candidate[0] === value,
+                      );
+                      if (!item) return null;
+                      const [, label, Icon] = item;
+                      return (
+                        <button
+                          type="button"
+                          key={value}
+                          onClick={() => navigate(value)}
+                          aria-current={view === value ? 'page' : undefined}
+                        >
+                          <Icon size={20} />
+                          <span>{label}</span>
+                          <ChevronRight size={17} />
+                        </button>
+                      );
+                    })}
+                  </div>
                 ))}
                 <a
                   className="metric-reference"
@@ -1147,6 +1239,7 @@ export default function Home() {
                 note="Verified outbound TCP connection"
               />
             </section>
+            <HealthSummary health={d.health_score} />
             <div className="overview-grid">
               <Panel
                 title="Reception activity"
@@ -2048,6 +2141,17 @@ export default function Home() {
             </details>
           </>
         )}
+        {INTELLIGENCE_VIEWS.includes(view) && (
+          <Suspense
+            fallback={
+              <div className="feature-loading">
+                Loading observatory intelligence…
+              </div>
+            }
+          >
+            <IntelligenceViews view={view} snapshot={d} />
+          </Suspense>
+        )}
         {view === 'station' && (
           <div className="content-grid">
             <Panel
@@ -2156,6 +2260,7 @@ export default function Home() {
             </Panel>
           </div>
         )}
+        <PwaControls visible={view === 'station'} alerts={d.smart_alerts} />
       </main>
       <footer className="site-footer">
         <span>Antenna Observatory</span>

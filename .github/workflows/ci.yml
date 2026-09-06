@@ -70,7 +70,10 @@ jobs:
         run: pnpm check:size
 
       - name: Package release
-        run: tar -czf release.tgz dist/client server ops/servercheap-supervisor.py ops/start-servercheap.sh
+        run: >-
+          tar -czf release.tgz dist/client
+          server/observatory.py server/intelligence.py
+          ops/servercheap-supervisor.py ops/start-servercheap.sh
 
       - name: Upload tested release
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

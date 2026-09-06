@@ -61,9 +61,11 @@ def main():
     (stage/'server').mkdir(parents=True)
     shutil.copytree(built,stage/'dist/client')
     shutil.copy2(ROOT/'server/observatory.py',stage/'server/observatory.py')
+    shutil.copy2(ROOT/'server/intelligence.py',stage/'server/intelligence.py')
     (stage/'ops').mkdir()
     shutil.copy2(ROOT/'ops/telemetry-uplink.py',stage/'ops/telemetry-uplink.py')
     shutil.copy2(ROOT/'ops/frame-uplink.py',stage/'ops/frame-uplink.py')
+    shutil.copy2(ROOT/'ops/spectrum-sidecar.py',stage/'ops/spectrum-sidecar.py')
     if run('/bin/launchctl','print',f'{DOMAIN}/{LABEL}').returncode==0:
         result=run('/bin/launchctl','bootout',f'{DOMAIN}/{LABEL}')
         if result.returncode: raise SystemExit(result.stderr)

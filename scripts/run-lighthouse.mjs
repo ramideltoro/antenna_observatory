@@ -16,13 +16,20 @@ const thresholds = {
 await rm(outputDirectory, { force: true, recursive: true });
 await mkdir(outputDirectory, { recursive: true });
 
-const chrome = await chromeLauncher.launch({
-  chromeFlags: ['--headless', '--no-sandbox', '--disable-dev-shm-usage'],
-});
 const observations = [];
 
-try {
-  for (let run = 1; run <= 3; run += 1) {
+for (let run = 1; run <= 3; run += 1) {
+  // A fresh browser prevents a crashed audit target from poisoning later runs
+  // on memory-constrained CI workers.
+  const chrome = await chromeLauncher.launch({
+    chromeFlags: [
+      '--headless',
+      '--no-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+    ],
+  });
+  try {
     const result = await lighthouse(url, {
       logLevel: 'warn',
       onlyCategories: Object.keys(thresholds),
@@ -59,9 +66,9 @@ try {
       largestContentfulPaint,
       scores,
     });
+  } finally {
+    chrome.kill();
   }
-} finally {
-  chrome.kill();
 }
 
 const median = (values) => [...values].sort((left, right) => left - right)[1];

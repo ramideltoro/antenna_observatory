@@ -140,6 +140,7 @@ function SignalChart({
             width="100%"
             height="100%"
             minWidth={0}
+            initialDimension={{ width: 560, height }}
             debounce={60}
           >
             <ComposedChart

@@ -2,7 +2,17 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 export const metadata: Metadata = {
   title: 'Antenna Observatory',
-  icons: { icon: '/favicon.svg' },
+  applicationName: 'Antenna Observatory',
+  manifest: '/manifest.webmanifest',
+  icons: {
+    icon: '/favicon.svg',
+    apple: '/icons/icon-192.png',
+  },
+  appleWebApp: {
+    capable: true,
+    title: 'Observatory',
+    statusBarStyle: 'black-translucent',
+  },
   description:
     'Local aircraft signals, receiver health, and feed observability.',
 };

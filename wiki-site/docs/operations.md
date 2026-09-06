@@ -91,3 +91,17 @@ Stop or quiesce the relay before making a raw SQLite filesystem copy, or use SQL
 | Monthly            | Range trend, strong-signal percentage, disk use, retained releases |
 | After macOS update | Homebrew paths, LaunchAgent state, USB access, sleep behavior      |
 | After antenna move | Position, coax connection, signal/noise trend, maximum range       |
+
+Record antenna moves, cable changes, receiver replacements, software upgrades, and incidents in the dashboard’s **Maintenance** view. This makes a later range or noise change interpretable.
+
+## Optional spectrum receiver
+
+The spectrum waterfall deliberately refuses to use the serial number reserved for readsb. Connect and assign a unique serial to a second RTL-SDR, then run:
+
+```bash
+python3 "$HOME/Library/Application Support/AntennaObservatory/app/ops/spectrum-sidecar.py" \
+  --device SECOND_RECEIVER_SERIAL \
+  --protected-device YOUR_READSB_SERIAL
+```
+
+The sidecar writes a bounded 80-line waterfall to the observatory state directory. If the second receiver or `rtl_power` is unavailable, it retries without touching readsb. Do not configure the primary receiver serial: the sidecar fails closed to protect the airplanes.live feed.

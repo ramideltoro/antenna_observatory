@@ -164,3 +164,15 @@ tail -n 30 "$HOME/Library/Logs/antenna-observatory-frames.log"
 ```
 
 Then lock the screen for several minutes and confirm that MyFeed and the dashboard continue updating.
+
+## 11. Optional spectrum waterfall
+
+Keep the primary NESDR dedicated to readsb. A live spectrum waterfall requires a second RTL-SDR with a different serial number. After connecting it, use the installed sidecar:
+
+```bash
+python3 "$HOME/Library/Application Support/AntennaObservatory/app/ops/spectrum-sidecar.py" \
+  --device SECOND_RECEIVER_SERIAL \
+  --protected-device YOUR_READSB_SERIAL
+```
+
+The sidecar exits before opening the tuner if both serials match. This guard prevents a spectrum scan from interrupting the airplanes.live feed. The Spectrum page remains in a safe readiness state until recent sidecar data exists.
