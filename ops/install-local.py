@@ -6,9 +6,11 @@ ROOT=Path(__file__).resolve().parent.parent
 BASE=Path.home()/'Library/Application Support/AntennaObservatory'
 LABEL='local.antenna-observatory.web'
 FRAME_LABEL='local.antenna-observatory.frames'
+LEGACY_TUNNEL_LABEL='local.antenna-observatory.tunnel'
 DOMAIN=f'gui/{os.getuid()}'
 PLIST=Path.home()/'Library/LaunchAgents'/f'{LABEL}.plist'
 FRAME_PLIST=Path.home()/'Library/LaunchAgents'/f'{FRAME_LABEL}.plist'
+LEGACY_TUNNEL_PLIST=Path.home()/'Library/LaunchAgents'/f'{LEGACY_TUNNEL_LABEL}.plist'
 READSB_PLIST=Path.home()/'Library/LaunchAgents/local.airplanes-live.readsb.plist'
 
 def run(*args):
@@ -33,6 +35,22 @@ def replace_launch_agent(path,job):
         if loaded and original is not None:run('/bin/launchctl','bootstrap',DOMAIN,str(path))
         raise SystemExit(result.stderr)
 
+def retire_legacy_tunnel():
+    """Keep the public hostname on the remote relay after a VPS migration."""
+    loaded=run('/bin/launchctl','print',f'{DOMAIN}/{LEGACY_TUNNEL_LABEL}').returncode==0
+    if loaded:
+        result=run('/bin/launchctl','bootout',f'{DOMAIN}/{LEGACY_TUNNEL_LABEL}')
+        if result.returncode:raise SystemExit(result.stderr)
+    if LEGACY_TUNNEL_PLIST.is_file():
+        disabled=LEGACY_TUNNEL_PLIST.with_name(LEGACY_TUNNEL_PLIST.name+'.disabled')
+        counter=1
+        while disabled.exists():
+            disabled=LEGACY_TUNNEL_PLIST.with_name(LEGACY_TUNNEL_PLIST.name+f'.disabled-{counter}')
+            counter+=1
+        LEGACY_TUNNEL_PLIST.rename(disabled)
+    if loaded:
+        print('Retired the obsolete Mac Cloudflare tunnel; production remains on the remote relay.')
+
 def receiver_environment():
     """Read non-secret receiver identity from the installed readsb service."""
     result={'PYTHONUNBUFFERED':'1','ANTENNA_DEVICE_MODEL':'Nooelec NESDR SMArt v5'}
@@ -55,6 +73,7 @@ def main():
     if not zstd.is_file():raise SystemExit('Install zstd with Homebrew before enabling Beast archival.')
     try:readsb_job=plistlib.loads(READSB_PLIST.read_bytes())
     except (OSError,ValueError):raise SystemExit('The installed readsb LaunchAgent is unavailable or invalid.')
+    retire_legacy_tunnel()
     BASE.mkdir(parents=True,exist_ok=True)
     stage=BASE/'app-next';installed=BASE/'app';previous=BASE/'app-previous'
     if stage.exists(): shutil.rmtree(stage)
