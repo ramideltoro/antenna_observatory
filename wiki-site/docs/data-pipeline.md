@@ -8,12 +8,14 @@ sequenceDiagram
     participant Readsb as readsb on Mac
     participant Collector as Local collector
     participant Uploader as HTTPS uploader
+    participant Frames as Frame uploader
     participant Relay as Remote relay
     participant Browser as Dashboard browser
     participant AL as airplanes.live
 
     Radio->>Readsb: IQ samples at 2.4 MS/s
     Readsb->>AL: BeastReduce+ frames
+    Readsb->>Readsb: Rotate zstd Beast dump every two minutes
     Readsb->>Collector: aircraft.json, stats.json, receiver.json
     Readsb->>Collector: Beast frames on 127.0.0.1:30905
     loop Every second
@@ -24,6 +26,13 @@ sequenceDiagram
       Collector-->>Uploader: Snapshot and bounded log tail
       Uploader->>Relay: POST /api/ingest with bearer token
       Relay->>Relay: Validate, sanitize, and persist
+    end
+    loop Oldest completed batch first
+      Frames->>Frames: Validate and claim into durable spool
+      Frames->>Relay: PUT /api/ingest/beast/{sha256}
+      Relay->>Relay: Verify, atomically store, and acknowledge
+      Frames->>Frames: Delete only after matching acknowledgement
+      Relay->>Relay: Index every frame asynchronously
     end
     loop Every two seconds
       Browser->>Relay: Public GET /api/snapshot
@@ -81,6 +90,12 @@ The uploader requests a protected local endpoint, then posts a bounded JSON obje
 ```
 
 The relay rejects missing collections, non-finite timestamps, oversized requests, malformed logs, and incorrect bearer tokens. It copies the accepted object through strict JSON serialization before storing it.
+
+## Complete decoded-frame archive
+
+`readsb --dump-beast` writes every accepted Mode A/C, Mode S, and ADS-B frame with receiver ticks, signal byte, and synthetic wall-clock markers. The frame uploader never touches the SDR or changes the direct airplanes.live connector. It validates completed Zstandard files, moves them into a restart-safe spool, and uploads them oldest-first with content-addressed identities.
+
+The relay validates each compressed batch before durable acknowledgement, then a background worker indexes its frames transactionally. Duplicate PUT requests are successful no-ops. Processed batches and frame rows expire after 72 hours; aggregate dashboard samples retain their existing seven-day window.
 
 ## Retention and freshness
 

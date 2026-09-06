@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Antenna Observatory collector, public dashboard relay, and website server."""
-import argparse, collections, csv, gzip, hmac, io, ipaddress, json, math, os, re, secrets, socket, sqlite3, subprocess, threading, time
+import argparse, collections, csv, gzip, hashlib, hmac, io, ipaddress, json, math, os, re, secrets, shutil, socket, sqlite3, subprocess, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
@@ -13,6 +13,8 @@ REMOTE_CONFIG = STATE / 'remote-access.json'
 DB = STATE / 'observatory.sqlite'
 LOG = Path.home() / 'Library/Logs/airplanes-live.log'
 RELAY_TOKEN = STATE / 'relay-token'
+FRAME_UPLINK_STATUS = STATE / 'frame-uplink-status.json'
+BEAST_BATCHES = STATE / 'beast-batches'
 LABEL = 'local.airplanes-live.readsb'
 DEVICE_MODEL = os.environ.get('ANTENNA_DEVICE_MODEL', 'Nooelec NESDR SMArt v5')
 DEVICE_SERIAL = os.environ.get('ANTENNA_DEVICE_SERIAL', 'configured')
@@ -27,6 +29,9 @@ STATIC_CONTENT_TYPES = {
     '.txt':'text/plain; charset=utf-8', '.webmanifest':'application/manifest+json', '.woff':'font/woff',
     '.woff2':'font/woff2',
 }
+MAX_BEAST_COMPRESSED = 16 * 1024 * 1024
+MAX_BEAST_DECOMPRESSED = 64 * 1024 * 1024
+BEAST_RETENTION_SECONDS = 72 * 3600
 
 def build_static_manifest(public):
     public = public.resolve()
@@ -116,6 +121,64 @@ class BeastParser:
             if kind in (0x31,0x32,0x33): result.append((kind,bytes(data)))
         return result
 
+def parse_beast_dump(data,collect_frames=True,on_frame=None,allow_empty=False):
+    """Strictly parse a readsb dump-beast stream, including wall-clock markers."""
+    frames=[]; frame_count=0; offset=0; wall_ms=None; capture_start=None; capture_end=None
+    lengths={0x31:9,0x32:14,0x33:21}
+    while offset<len(data):
+        if offset+2>len(data) or data[offset]!=0x1a: raise ValueError('Malformed Beast record boundary')
+        kind=data[offset+1];offset+=2
+        if kind==0xe8:
+            if offset+8>len(data): raise ValueError('Truncated Beast wall-clock marker')
+            wall_ms=int.from_bytes(data[offset:offset+8],'little',signed=True);offset+=8
+            if wall_ms<946684800000 or wall_ms>4102444800000: raise ValueError('Invalid Beast wall-clock marker')
+            capture_start=wall_ms if capture_start is None else min(capture_start,wall_ms);capture_end=max(capture_end or wall_ms,wall_ms)
+            continue
+        length=lengths.get(kind)
+        if length is None: raise ValueError('Unsupported Beast record type')
+        decoded=bytearray()
+        while len(decoded)<length:
+            if offset>=len(data): raise ValueError('Truncated Beast frame')
+            value=data[offset];offset+=1
+            if value==0x1a:
+                if offset>=len(data) or data[offset]!=0x1a: raise ValueError('Invalid Beast escape sequence')
+                offset+=1
+            decoded.append(value)
+        if wall_ms is None: raise ValueError('Beast frame precedes wall-clock marker')
+        payload=bytes(decoded[7:]);family,df,tc=classify_frame(kind,payload)
+        frame={'ordinal':frame_count,'ts':wall_ms/1000,'kind':kind,'receiver_ticks':int.from_bytes(decoded[:6],'big'),
+          'signal':decoded[6],'payload':payload,'family':family,'df':df,'type_code':tc}
+        if collect_frames:frames.append(frame)
+        if on_frame:on_frame(frame)
+        frame_count+=1
+    if not frame_count:
+        if not allow_empty:raise ValueError('Beast batch contains no decoded frames')
+        return {'frames':frames,'frame_count':0,'capture_start':capture_start/1000 if capture_start else None,'capture_end':capture_end/1000 if capture_end else None}
+    if capture_start is None:raise ValueError('Beast batch contains no wall-clock marker')
+    if capture_end-capture_start>5*60*1000: raise ValueError('Beast batch time span is too large')
+    return {'frames':frames,'frame_count':frame_count,'capture_start':capture_start/1000,'capture_end':capture_end/1000}
+
+def decompress_zstd(path,limit=MAX_BEAST_DECOMPRESSED):
+    """Decompress one bounded zstd file without allowing unbounded child output."""
+    executable=os.environ.get('ANTENNA_ZSTD') or shutil.which('zstd')
+    if not executable: raise RuntimeError('zstd executable is unavailable')
+    process=subprocess.Popen([executable,'-dc','--quiet',str(path)],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+    output=bytearray()
+    try:
+        while True:
+            chunk=process.stdout.read(min(65536,limit+1-len(output)))
+            if not chunk: break
+            output.extend(chunk)
+            if len(output)>limit:
+                process.kill();raise ValueError('Expanded Beast batch is too large')
+        error=process.stderr.read(4096);code=process.wait(timeout=10)
+    except BaseException:
+        process.kill();process.wait();raise
+    finally:
+        process.stdout.close();process.stderr.close()
+    if code: raise ValueError('Invalid Zstandard batch: '+error.decode('utf-8','replace').strip()[:200])
+    return bytes(output)
+
 class Observatory:
     def __init__(self):
         STATE.mkdir(parents=True,exist_ok=True); DATA.mkdir(exist_ok=True)
@@ -199,6 +262,7 @@ class Observatory:
         now=time.time()
         if now-self.last_health>=10: self.inspect_host(); self.last_health=now
         raw=read_json(DATA/'aircraft.json'); stats=read_json(DATA/'stats.json'); receiver=read_json(DATA/'receiver.json')
+        frame_pipeline=read_json(FRAME_UPLINK_STATUS,{'state':'waiting','pending_batches':0,'spool_bytes':0,'gap_count':0})
         timestamp=raw.get('now'); age=max(0,now-timestamp) if isinstance(timestamp,(int,float)) else None
         fresh=age is not None and age<6
         total=stats.get('total',{}); window=stats.get('last1min',{})
@@ -250,7 +314,8 @@ class Observatory:
               'formats':[{'df':k,'name':DF_NAMES.get(k,'Other format'),'count':v,'last60':recent_df[k], 'families':{f:self.df_family[(k,f)] for f in FAMILIES}, 'last60_by_family':{f:recent_df_family[(k,f)] for f in FAMILIES}} for k,v in sorted(self.df.items())],
               'type_codes':[{'code':k,'name':TYPE_NAMES.get(k,'Reserved / other'),'count':v} for k,v in sorted(self.tc.items())],
               'recent_frames':list(self.recent),'events':list(reversed(self.events))[:100], 'host':self.host,'beast_connected':self.beast_connected,
-              'receiver':receiver,'stats':stats,'raw_aircraft':raw,'hardware':{'model':DEVICE_MODEL,'serial':DEVICE_SERIAL,'tuner':'Rafael Micro R820T','frequency_mhz':1090,'sample_rate_msps':2.4,'feeder_id':FEEDER_ID,'mlat_configured':False,'modeac_enabled':True}}
+              'receiver':receiver,'stats':stats,'raw_aircraft':raw,'frame_pipeline':frame_pipeline,
+              'hardware':{'model':DEVICE_MODEL,'serial':DEVICE_SERIAL,'tuner':'Rafael Micro R820T','frequency_mhz':1090,'sample_rate_msps':2.4,'feeder_id':FEEDER_ID,'mlat_configured':False,'modeac_enabled':True}}
             if now-self.last_persist>=10:
                 sample=dict(metrics,ts=now,signals={s['name']:s['rate'] for s in signals},state=state)
                 self.db.execute('INSERT OR REPLACE INTO samples VALUES (?,?)',(now,json.dumps(sample,allow_nan=False)))
@@ -289,17 +354,123 @@ class Observatory:
         except OSError: return []
 
 class RelayObservatory:
-    """Stores telemetry pushed by the Mac while serving the public dashboard."""
+    """Stores telemetry and durable Beast batches pushed by the Mac."""
     def __init__(self):
-        STATE.mkdir(parents=True,exist_ok=True)
-        self.lock=threading.RLock();self.started=time.time();self.last_persist=0
+        STATE.mkdir(parents=True,exist_ok=True);BEAST_BATCHES.mkdir(exist_ok=True)
+        self.lock=threading.RLock();self.stop=threading.Event();self.wake=threading.Event();self.started=time.time();self.last_persist=0;self.last_cleanup=0
         self.latest=read_json(STATE/'relay-latest.json');self.log_lines=read_json(STATE/'relay-logs.json',[])
         self.received_at=self.latest.get('relay_received_at',0) if isinstance(self.latest,dict) else 0
         self.db=sqlite3.connect(DB,check_same_thread=False)
-        self.db.execute('PRAGMA journal_mode=WAL');self.db.execute('PRAGMA busy_timeout=5000')
+        self.db.execute('PRAGMA journal_mode=WAL');self.db.execute('PRAGMA busy_timeout=5000');self.db.execute('PRAGMA foreign_keys=ON')
         self.db.execute('CREATE TABLE IF NOT EXISTS samples (ts REAL PRIMARY KEY, payload TEXT NOT NULL)')
         self.db.execute('CREATE TABLE IF NOT EXISTS events (ts REAL NOT NULL, level TEXT NOT NULL, message TEXT NOT NULL)')
-        self.db.execute('CREATE INDEX IF NOT EXISTS events_ts ON events(ts)');self.db.commit()
+        self.db.execute('CREATE INDEX IF NOT EXISTS events_ts ON events(ts)')
+        self.db.execute('''CREATE TABLE IF NOT EXISTS beast_batches (
+          sha256 TEXT PRIMARY KEY, received_at REAL NOT NULL, capture_start REAL NOT NULL, capture_end REAL NOT NULL,
+          compressed_bytes INTEGER NOT NULL, decompressed_bytes INTEGER NOT NULL, frame_count INTEGER NOT NULL,
+          status TEXT NOT NULL, error TEXT, processed_at REAL)''')
+        self.db.execute('CREATE INDEX IF NOT EXISTS beast_batches_status_time ON beast_batches(status,capture_start)')
+        self.db.execute('''CREATE TABLE IF NOT EXISTS beast_frames (
+          batch_sha TEXT NOT NULL, ordinal INTEGER NOT NULL, ts REAL NOT NULL, kind INTEGER NOT NULL,
+          receiver_ticks INTEGER NOT NULL, signal INTEGER NOT NULL, payload BLOB NOT NULL, family TEXT NOT NULL,
+          df INTEGER, type_code INTEGER, PRIMARY KEY(batch_sha,ordinal),
+          FOREIGN KEY(batch_sha) REFERENCES beast_batches(sha256) ON DELETE CASCADE)''')
+        self.db.execute('CREATE INDEX IF NOT EXISTS beast_frames_ts ON beast_frames(ts)')
+        self.db.execute('CREATE INDEX IF NOT EXISTS beast_frames_family_ts ON beast_frames(family,ts)')
+        self.db.execute("UPDATE beast_batches SET status='pending',error=NULL WHERE status='processing'");self.db.commit()
+        self.recover_batches()
+        self.worker=threading.Thread(target=self.worker_loop,name='beast-batch-worker',daemon=True);self.worker.start()
+    def recover_batches(self):
+        """Recover a durable file left between rename and the manifest commit."""
+        known={row[0] for row in self.db.execute('SELECT sha256 FROM beast_batches')}
+        for path in BEAST_BATCHES.glob('*.zst'):
+            digest=path.stem
+            if digest in known or not re.fullmatch(r'[0-9a-f]{64}',digest): continue
+            try:
+                expanded=decompress_zstd(path);parsed=parse_beast_dump(expanded,collect_frames=False,allow_empty=True);now=time.time();start=parsed['capture_start'] or path.stat().st_mtime;end=parsed['capture_end'] or start
+                self.db.execute('INSERT INTO beast_batches VALUES (?,?,?,?,?,?,?,?,?,?)',
+                  (digest,now,start,end,path.stat().st_size,len(expanded),parsed['frame_count'],'pending',None,None))
+                self.db.commit()
+            except Exception as exc: print('Unable to recover Beast batch:',path.name,type(exc).__name__,str(exc),flush=True)
+    def ingest_beast(self,digest,body):
+        if not re.fullmatch(r'[0-9a-f]{64}',digest): raise ValueError('Invalid Beast batch digest')
+        if hashlib.sha256(body).hexdigest()!=digest: raise ValueError('Beast batch checksum does not match its URL')
+        with self.lock:
+            row=self.db.execute('SELECT status FROM beast_batches WHERE sha256=?',(digest,)).fetchone()
+            if row:return {'accepted':True,'sha256':digest,'duplicate':True,'status':row[0]}
+        temporary=BEAST_BATCHES/('.'+digest+'.'+secrets.token_hex(8)+'.tmp');final=BEAST_BATCHES/(digest+'.zst')
+        descriptor=os.open(temporary,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+        try:
+            with os.fdopen(descriptor,'wb') as stream:
+                stream.write(body);stream.flush();os.fsync(stream.fileno())
+            expanded=decompress_zstd(temporary);parsed=parse_beast_dump(expanded,collect_frames=False,allow_empty=True);now=time.time();start=parsed['capture_start'] or now;end=parsed['capture_end'] or start
+            with self.lock:
+                row=self.db.execute('SELECT status FROM beast_batches WHERE sha256=?',(digest,)).fetchone()
+                if row:return {'accepted':True,'sha256':digest,'duplicate':True,'status':row[0]}
+                os.replace(temporary,final);os.chmod(final,0o600)
+                directory=os.open(BEAST_BATCHES,os.O_RDONLY)
+                try:os.fsync(directory)
+                finally:os.close(directory)
+                self.db.execute('INSERT INTO beast_batches VALUES (?,?,?,?,?,?,?,?,?,?)',
+                  (digest,now,start,end,len(body),len(expanded),parsed['frame_count'],'pending',None,None))
+                self.db.commit()
+            self.wake.set()
+            return {'accepted':True,'sha256':digest,'duplicate':False,'status':'pending'}
+        finally:
+            try:temporary.unlink()
+            except FileNotFoundError:pass
+    def process_one_batch(self):
+        with self.lock:
+            row=self.db.execute("SELECT sha256 FROM beast_batches WHERE status='pending' ORDER BY capture_start,received_at LIMIT 1").fetchone()
+            if not row:return False
+            digest=row[0];self.db.execute("UPDATE beast_batches SET status='processing',error=NULL WHERE sha256=?",(digest,));self.db.commit()
+        try:
+            expanded=decompress_zstd(BEAST_BATCHES/(digest+'.zst'));buffer=[];inserted=0
+            with self.lock:
+                self.db.execute('DELETE FROM beast_frames WHERE batch_sha=?',(digest,))
+                def insert_frame(frame):
+                    nonlocal inserted
+                    buffer.append((digest,frame['ordinal'],frame['ts'],frame['kind'],frame['receiver_ticks'],frame['signal'],frame['payload'],frame['family'],frame['df'],frame['type_code']))
+                    if len(buffer)>=1000:
+                        self.db.executemany('INSERT INTO beast_frames VALUES (?,?,?,?,?,?,?,?,?,?)',buffer);inserted+=len(buffer);buffer.clear()
+                parsed=parse_beast_dump(expanded,collect_frames=False,on_frame=insert_frame,allow_empty=True)
+                if buffer:self.db.executemany('INSERT INTO beast_frames VALUES (?,?,?,?,?,?,?,?,?,?)',buffer);inserted+=len(buffer)
+                if inserted!=parsed['frame_count']:raise ValueError('Beast frame indexing count mismatch')
+                self.db.execute("UPDATE beast_batches SET status='processed',processed_at=?,error=NULL,frame_count=? WHERE sha256=?",(time.time(),inserted,digest));self.db.commit()
+        except Exception as exc:
+            with self.lock:
+                self.db.rollback();self.db.execute('DELETE FROM beast_frames WHERE batch_sha=?',(digest,))
+                self.db.execute("UPDATE beast_batches SET status='failed',error=? WHERE sha256=?",((type(exc).__name__+': '+str(exc))[:500],digest));self.db.commit()
+            print('Beast batch processing failed:',digest,type(exc).__name__,str(exc),flush=True)
+        return True
+    def cleanup_batches(self):
+        now=time.time()
+        if now-self.last_cleanup<60:return
+        cutoff=now-BEAST_RETENTION_SECONDS
+        with self.lock:
+            rows=self.db.execute("SELECT sha256 FROM beast_batches WHERE status='processed' AND capture_end<?",(cutoff,)).fetchall()
+            for row in rows:
+                try:(BEAST_BATCHES/(row[0]+'.zst')).unlink()
+                except FileNotFoundError:pass
+                self.db.execute('DELETE FROM beast_batches WHERE sha256=?',row)
+            self.db.commit();self.last_cleanup=now
+    def worker_loop(self):
+        while not self.stop.is_set():
+            try:
+                worked=self.process_one_batch();self.cleanup_batches()
+            except Exception as exc:
+                worked=False;print('Beast worker error:',type(exc).__name__,str(exc),flush=True)
+            if not worked:self.wake.wait(2);self.wake.clear()
+    def pipeline_status(self):
+        with self.lock:
+            pending=self.db.execute("SELECT COUNT(*) FROM beast_batches WHERE status IN ('pending','processing')").fetchone()[0]
+            failed=self.db.execute("SELECT COUNT(*) FROM beast_batches WHERE status='failed'").fetchone()[0]
+            uploaded=self.db.execute('SELECT MAX(received_at) FROM beast_batches').fetchone()[0]
+            processed=self.db.execute("SELECT MAX(processed_at) FROM beast_batches WHERE status='processed'").fetchone()[0]
+            captured=self.db.execute('SELECT MAX(capture_end) FROM beast_batches').fetchone()[0]
+            oldest=self.db.execute("SELECT MIN(capture_start) FROM beast_batches WHERE status IN ('pending','processing')").fetchone()[0]
+        return {'server_pending_batches':pending,'failed_batches':failed,'server_last_uploaded_at':uploaded,'last_processed_at':processed,
+          'server_last_captured_at':captured,'server_oldest_pending_age_s':max(0,time.time()-oldest) if oldest else None}
     def ingest(self,envelope):
         if not isinstance(envelope,dict) or not isinstance(envelope.get('snapshot'),dict): raise ValueError('Expected a telemetry snapshot')
         snap=envelope['snapshot']; required=('now','state','metrics','aircraft','signals','events','host','hardware')
@@ -328,10 +499,20 @@ class RelayObservatory:
             snap['state']='stale' if snap else 'waiting'
             for aircraft in snap.get('aircraft',[]): aircraft['live']=False
         if snap.get('source_time'): snap['age_seconds']=max(0,now-snap['source_time'])
+        local=snap.get('frame_pipeline',{}) if isinstance(snap.get('frame_pipeline'),dict) else {};server=self.pipeline_status()
+        local_pending=local.get('pending_batches',0) if isinstance(local.get('pending_batches'),int) else 0
+        server_pending=server.get('server_pending_batches',0);oldest=[value for value in (local.get('oldest_pending_age_s'),server.get('server_oldest_pending_age_s')) if isinstance(value,(int,float))]
+        pipeline=dict(local);pipeline.update(server);pipeline['pending_batches']=local_pending+server_pending;pipeline['oldest_pending_age_s']=max(oldest) if oldest else None
+        pipeline['state']='error' if pipeline.get('gap_count',0) or pipeline.get('failed_batches',0) else 'backlogged' if pipeline['pending_batches'] else 'live' if pipeline.get('last_processed_at') else 'waiting'
+        snap['frame_pipeline']=pipeline
         return snap
     def history(self,hours): return Observatory.history(self,hours)
     def logs(self):
         with self.lock:return list(self.log_lines)
+    def close(self):
+        self.stop.set();self.wake.set();self.worker.join(timeout=15)
+        if self.worker.is_alive():print('Beast worker did not stop before shutdown.',flush=True)
+        else:self.db.close()
 
 class Handler(BaseHTTPRequestHandler):
     server_version='AntennaObservatory/1'
@@ -386,6 +567,16 @@ class Handler(BaseHTTPRequestHandler):
             body=json.loads(self.rfile.read(length))
             return self.respond(200,self.server.obs.ingest(body))
         except (ValueError,TypeError,UnicodeError) as e:return self.respond(400,{'error':str(e)})
+    def relay_beast_ingest(self,digest):
+        if not getattr(self.server,'relay_mode',False): return self.respond(404,{'error':'Unknown endpoint'})
+        if not self.relay_authorized(): return self.respond(401,{'error':'Invalid relay credential'})
+        try:
+            length=int(self.headers.get('Content-Length','0'))
+            if not 0<length<=MAX_BEAST_COMPRESSED or self.headers.get('Content-Type','').split(';')[0]!='application/zstd':
+                raise ValueError('Invalid Beast batch request')
+            return self.respond(200,self.server.obs.ingest_beast(digest,self.rfile.read(length)))
+        except (ValueError,TypeError,UnicodeError) as e:return self.respond(400,{'error':str(e)})
+        except RuntimeError as e:return self.respond(503,{'error':str(e)})
     def redirect(self, location, headers=None):
         return self.respond(303, '', 'text/html; charset=utf-8', dict(headers or {}, Location=location))
     def do_GET(self):
@@ -455,6 +646,11 @@ class Handler(BaseHTTPRequestHandler):
             self.server.obs.event('info','Local station settings updated')
             return self.respond(200,values)
         except (ValueError,TypeError,KeyError) as e: return self.respond(400,{'error':str(e)})
+    def do_PUT(self):
+        if not self.valid_host(): return self.respond(403,{'error':'Unrecognized dashboard hostname'})
+        match=re.fullmatch(r'/api/ingest/beast/([0-9a-f]{64})',urlparse(self.path).path)
+        if not match:return self.respond(404,{'error':'Unknown endpoint'})
+        return self.relay_beast_ingest(match.group(1))
 
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--port',type=int,default=8787);parser.add_argument('--relay',action='store_true');args=parser.parse_args()
@@ -468,6 +664,7 @@ def main():
     try: server.serve_forever()
     except KeyboardInterrupt: pass
     finally:
-        if hasattr(obs,'stop'):obs.stop.set()
+        if hasattr(obs,'close'):obs.close()
+        elif hasattr(obs,'stop'):obs.stop.set()
         server.server_close()
 if __name__=='__main__': main()

@@ -3,7 +3,7 @@
 [![CI](https://github.com/ramideltoro/antenna_observatory/actions/workflows/ci.yml/badge.svg)](https://github.com/ramideltoro/antenna_observatory/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/ramideltoro/antenna_observatory/actions/workflows/codeql.yml/badge.svg)](https://github.com/ramideltoro/antenna_observatory/actions/workflows/codeql.yml)
 
-Antenna Observatory is a public, amber-themed dashboard for a 1090 MHz aircraft receiver. A Nooelec SDR connected to a Mac runs `readsb`, feeds decoded aircraft data directly to airplanes.live, and securely uploads receiver telemetry to a remote server for live charts and seven-day history.
+Antenna Observatory is a public, amber-themed dashboard for a 1090 MHz aircraft receiver. A Nooelec SDR connected to a Mac runs `readsb`, feeds decoded aircraft data directly to airplanes.live, and securely uploads receiver telemetry plus durable two-minute Beast batches to a remote server. The relay provides live charts, seven-day aggregate history, and a 72-hour per-frame archive.
 
 Open the dashboard at **[antenna.ramideltoro.com](https://antenna.ramideltoro.com)**. Live views and read APIs are open without an account; telemetry ingestion and station changes remain protected.
 

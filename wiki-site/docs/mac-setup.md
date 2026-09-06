@@ -26,6 +26,7 @@ If the command is missing, install Homebrew from [brew.sh](https://brew.sh), reo
 brew install librtlsdr
 brew install dump1090-fa
 brew install readsb
+brew install zstd
 ```
 
 `dump1090-fa` was installed during initial testing. The production service uses `readsb` because it exposes the JSON, statistics, Beast stream, gain control, and network connector needed by the observatory.
@@ -98,7 +99,7 @@ sed \
 unset DEVICE_SERIAL AIRPLANES_LIVE_UUID
 ```
 
-The production arguments also write one-second JSON files to the observatory state directory, bind the local Beast output to `127.0.0.1:30905`, and enable Mode A/C detection.
+The production arguments also write one-second JSON files to the observatory state directory, bind the local Beast output to `127.0.0.1:30905`, enable Mode A/C detection, and rotate level-1 Zstandard Beast archives every two minutes.
 
 Validate and start it:
 
@@ -133,7 +134,7 @@ pnpm build
 python3 ops/install-local.py
 ```
 
-The installer copies the built app and Python service under `~/Library/Application Support/AntennaObservatory`, creates a `KeepAlive` web LaunchAgent, and preserves the previous installed app for rollback.
+The installer copies the built app and Python services under `~/Library/Application Support/AntennaObservatory`, creates `KeepAlive` web and frame-uploader LaunchAgents, safely adds native Beast dumping to the installed readsb job, and preserves the previous installed app for rollback. The readsb job is restored automatically if its updated LaunchAgent cannot start.
 
 The local dashboard is available at `http://127.0.0.1:8787`.
 
@@ -155,9 +156,11 @@ launchctl bootstrap "gui/$(id -u)" \
 launchctl print "gui/$(id -u)/local.airplanes-live.readsb" | grep -E 'state =|pid ='
 launchctl print "gui/$(id -u)/local.antenna-observatory.web" | grep -E 'state =|pid ='
 launchctl print "gui/$(id -u)/local.antenna-observatory.uplink" | grep -E 'state =|pid ='
+launchctl print "gui/$(id -u)/local.antenna-observatory.frames" | grep -E 'state =|pid ='
 launchctl print "gui/$(id -u)/local.antenna-observatory.keepawake" | grep -E 'state =|pid ='
 tail -n 30 "$HOME/Library/Logs/airplanes-live.log"
 tail -n 30 "$HOME/Library/Logs/antenna-observatory-uplink.log"
+tail -n 30 "$HOME/Library/Logs/antenna-observatory-frames.log"
 ```
 
 Then lock the screen for several minutes and confirm that MyFeed and the dashboard continue updating.

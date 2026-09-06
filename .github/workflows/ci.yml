@@ -36,6 +36,9 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install backend system dependencies
+        run: sudo apt-get update && sudo apt-get install --yes zstd
+
       - name: Install pnpm
         run: npm install --global "pnpm@$PNPM_VERSION"
 

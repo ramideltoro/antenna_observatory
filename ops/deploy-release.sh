@@ -13,6 +13,7 @@ case "$release_sha" in
 esac
 [ "${#release_sha}" -eq 40 ] || { echo "invalid release commit length" >&2; exit 2; }
 [ -f "$archive" ] || { echo "release archive is missing" >&2; exit 2; }
+command -v zstd >/dev/null 2>&1 || { echo "zstd is required for Beast batch processing" >&2; exit 1; }
 
 base="$HOME/antenna-observatory"
 releases="$base/releases"

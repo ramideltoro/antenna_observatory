@@ -23,6 +23,7 @@
 		<string>__HOME__/Library/Application Support/AntennaObservatory/state/readsb</string>
 		<string>--write-json-every</string>
 		<string>1</string>
+		<string>--dump-beast=__HOME__/Library/Application Support/AntennaObservatory/state/beast-dump,120,1</string>
 		<string>--net-bind-address</string>
 		<string>127.0.0.1</string>
 		<string>--net-bo-port</string>

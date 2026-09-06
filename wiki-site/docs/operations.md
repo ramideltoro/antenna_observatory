@@ -7,8 +7,10 @@ flowchart LR
     USB[USB receiver] --> R[readsb]
     R --> AL[airplanes.live]
     R --> C[collector]
+    R --> F[frame dump and spool]
     C --> U[uploader]
     U --> V[remote relay]
+    F --> V
     T[Cloudflare tunnel] --> V
     V --> B[browser]
 ```
@@ -22,6 +24,7 @@ for label in \
   local.airplanes-live.readsb \
   local.antenna-observatory.web \
   local.antenna-observatory.uplink \
+  local.antenna-observatory.frames \
   local.antenna-observatory.keepawake
 do
   launchctl print "gui/$(id -u)/$label" | grep -E 'state =|pid =|last exit code'
@@ -37,9 +40,12 @@ done
 | readsb and airplanes.live connector | `~/Library/Logs/airplanes-live.log`             |
 | Local web collector                 | `~/Library/Logs/antenna-observatory.log`        |
 | Remote telemetry uploader           | `~/Library/Logs/antenna-observatory-uplink.log` |
+| Durable frame uploader              | `~/Library/Logs/antenna-observatory-frames.log` |
 | Old Mac tunnel rollback service     | `~/Library/Logs/antenna-observatory-tunnel.log` |
 
 On Linux, the unprivileged supervisors write relay and tunnel logs under `~/.local/state/antenna-observatory/`.
+
+The Feed view reports the frame pipeline state, pending batches, spool bytes, oldest pending age, last capture/upload/process times, failed batches, and recorded gaps. During a network outage, pending batches and oldest age should rise while the direct airplanes.live connection remains independent. After recovery, they should return to zero.
 
 ## Restart a Mac job
 
@@ -68,6 +74,8 @@ Back up the remote state directory separately from releases. It contains:
 - relay and tunnel token files;
 - the SQLite history database and WAL files;
 - latest accepted relay snapshot and bounded log tail;
+- compressed Beast batches awaiting or completing 72-hour retention;
+- content-addressed batch manifests and per-frame indexes;
 - public-origin configuration.
 
 Stop or quiesce the relay before making a raw SQLite filesystem copy, or use SQLite’s online backup command. Protect backups with the same care as production state.
@@ -77,6 +85,7 @@ Stop or quiesce the relay before making a raw SQLite filesystem copy, or use SQL
 | Frequency          | Check                                                              |
 | ------------------ | ------------------------------------------------------------------ |
 | Daily              | Dashboard freshness and airplanes.live feed state                  |
+| Daily              | Frame pipeline backlog, failures, gaps, and last processed time    |
 | Weekly             | Decoder log for repeated restarts, USB loss, or reconnection loops |
 | Weekly             | Dependabot and CodeQL results                                      |
 | Monthly            | Range trend, strong-signal percentage, disk use, retained releases |

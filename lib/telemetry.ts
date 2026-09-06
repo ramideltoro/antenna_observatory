@@ -91,6 +91,19 @@ export interface Snapshot {
   receiver: { version?: string };
   stats: { last1min?: DecoderWindow; total?: DecoderWindow };
   raw_aircraft: Record<string, unknown>;
+  frame_pipeline: {
+    state?: string;
+    last_captured_at?: number | null;
+    last_uploaded_at?: number | null;
+    last_processed_at?: number | null;
+    pending_batches?: number;
+    server_pending_batches?: number;
+    spool_bytes?: number;
+    oldest_pending_age_s?: number | null;
+    gap_count?: number;
+    failed_batches?: number;
+    last_error?: string | null;
+  };
   hardware: {
     model: string;
     serial: string;
