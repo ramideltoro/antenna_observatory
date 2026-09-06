@@ -60,6 +60,8 @@ Readsb may still be feeding airplanes.live while the observatory path is broken.
 
 An HTTP 401 from `/api/ingest` means the Mac and relay token files do not match. Replace them through a protected channel; never paste the token into a repository or issue.
 
+An HTTP 404 from the decoded-frame uploader after moving the dashboard to the VPS usually means the obsolete Mac Cloudflare Tunnel LaunchAgent is still loaded. The Mac and VPS then act as connectors for the same hostname, and a Beast upload can reach the local collector instead of the relay. Run the current local installer to retire `local.antenna-observatory.tunnel`; only the VPS tunnel should serve the public hostname.
+
 ## Public domain does not open
 
 Check DNS resolution, Cloudflare Tunnel status, the Linux tunnel supervisor, and local relay readiness. The application should remain bound to loopback; do not expose port 8787 publicly as a workaround.
