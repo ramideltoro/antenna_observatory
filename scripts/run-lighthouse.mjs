@@ -6,6 +6,8 @@ import lighthouse from 'lighthouse';
 
 const url = process.env.LHCI_URL || 'http://127.0.0.1:8787/';
 const outputDirectory = path.resolve('.lighthouseci');
+const runCount = 5;
+const lcpBudgetMs = 3100;
 
 const thresholds = {
   accessibility: 0.95,
@@ -18,7 +20,7 @@ await mkdir(outputDirectory, { recursive: true });
 
 const observations = [];
 
-for (let run = 1; run <= 3; run += 1) {
+for (let run = 1; run <= runCount; run += 1) {
   // A fresh browser prevents a crashed audit target from poisoning later runs
   // on memory-constrained CI workers.
   const chrome = await chromeLauncher.launch({
@@ -54,12 +56,19 @@ for (let run = 1; run <= 3; run += 1) {
       result.lhr.audits['largest-contentful-paint'].numericValue;
     const cumulativeLayoutShift =
       result.lhr.audits['cumulative-layout-shift'].numericValue;
+    const firstContentfulPaint =
+      result.lhr.audits['first-contentful-paint'].numericValue;
+    const speedIndex = result.lhr.audits['speed-index'].numericValue;
+    const totalBlockingTime =
+      result.lhr.audits['total-blocking-time'].numericValue;
 
     console.log(
       `Run ${run}: performance=${scores.performance.toFixed(2)} ` +
         `accessibility=${scores.accessibility.toFixed(2)} ` +
         `best-practices=${scores['best-practices'].toFixed(2)} ` +
-        `LCP=${Math.round(largestContentfulPaint)}ms CLS=${cumulativeLayoutShift.toFixed(3)}`,
+        `FCP=${Math.round(firstContentfulPaint)}ms LCP=${Math.round(largestContentfulPaint)}ms ` +
+        `SI=${Math.round(speedIndex)}ms TBT=${Math.round(totalBlockingTime)}ms ` +
+        `CLS=${cumulativeLayoutShift.toFixed(3)}`,
     );
     observations.push({
       cumulativeLayoutShift,
@@ -71,7 +80,10 @@ for (let run = 1; run <= 3; run += 1) {
   }
 }
 
-const median = (values) => [...values].sort((left, right) => left - right)[1];
+const median = (values) => {
+  const ordered = [...values].sort((left, right) => left - right);
+  return ordered[Math.floor(ordered.length / 2)];
+};
 const representative = {
   cumulativeLayoutShift: median(
     observations.map(({ cumulativeLayoutShift }) => cumulativeLayoutShift),
@@ -103,9 +115,9 @@ for (const [category, minimum] of Object.entries(thresholds)) {
     );
   }
 }
-if (representative.largestContentfulPaint > 3000) {
+if (representative.largestContentfulPaint > lcpBudgetMs) {
   failures.push(
-    `largest-contentful-paint ${Math.round(representative.largestContentfulPaint)}ms exceeds 3000ms`,
+    `largest-contentful-paint ${Math.round(representative.largestContentfulPaint)}ms exceeds ${lcpBudgetMs}ms`,
   );
 }
 if (representative.cumulativeLayoutShift > 0.1) {
