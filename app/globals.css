@@ -2589,6 +2589,15 @@ h2 {
   gap: 15px;
   padding: 0 20px 22px;
 }
+.maintenance-readonly p {
+  max-width: 32rem;
+  margin: 0;
+  line-height: 1.65;
+}
+.maintenance-readonly strong {
+  color: var(--foreground);
+  white-space: nowrap;
+}
 .maintenance-form label {
   display: grid;
   gap: 7px;
