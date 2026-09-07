@@ -1056,7 +1056,7 @@ export default function Home() {
       });
       const result = (await r.json()) as { error?: string };
       if (!r.ok) throw Error(result.error);
-      setSaved('Station settings saved on this Mac.');
+      setSaved('Station settings saved on the receiver host.');
     } catch (e) {
       setSaved(e instanceof Error ? e.message : 'Could not save settings.');
     } finally {
@@ -1464,9 +1464,11 @@ export default function Home() {
               </div>
             </Panel>
             <div className="notice info">
-              MLAT is not configured. UAT 978 MHz, airband voice, FM, and other
-              bands are not being received while this radio is tuned to 1090
-              MHz.
+              {d.hardware?.mlat_configured
+                ? 'MLAT is configured.'
+                : 'MLAT is not configured.'}{' '}
+              UAT 978 MHz, airband voice, FM, and other bands are not being
+              received while this radio is tuned to 1090 MHz.
             </div>
           </>
         )}
@@ -1741,8 +1743,14 @@ export default function Home() {
               />
               <Stat
                 label="MLAT"
-                value="Not configured"
-                note="No multilateration client installed"
+                value={
+                  d.hardware?.mlat_configured ? 'Configured' : 'Not configured'
+                }
+                note={
+                  d.hardware?.mlat_configured
+                    ? 'Multilateration enabled on the receiver'
+                    : 'No multilateration client configured'
+                }
               />
               <Stat
                 label="Service uptime"
@@ -1752,7 +1760,7 @@ export default function Home() {
             </section>
             <Panel
               title="Data path"
-              note="Connection status is verified from this Mac’s actual sockets"
+              note="Connection status is verified from the receiver host’s actual sockets"
             >
               <div className="feed-path">
                 <div>
@@ -1803,7 +1811,10 @@ export default function Home() {
                         ? 'Connected · loopback only'
                         : 'Disconnected',
                     ],
-                    ['Local frame endpoint', '127.0.0.1:30905'],
+                    [
+                      'Local frame endpoint',
+                      `127.0.0.1:${d.host?.beast_port || 30905}`,
+                    ],
                   ]}
                 />
                 <div className="panel-bottom">
@@ -1835,7 +1846,7 @@ export default function Home() {
                 <p className="panel-explanation">
                   A TCP connection confirms transport, not server acceptance of
                   every frame. MyFeed provides the server-side view. Its MLAT
-                  badge does not establish that this Mac has an MLAT client.
+                  badge does not establish that the receiver has an MLAT client.
                 </p>
               </Panel>
             </div>
@@ -2001,8 +2012,8 @@ export default function Home() {
               <div>
                 <h2>Receiver timeline</h2>
                 <p>
-                  Connection transitions and observatory changes stored on this
-                  Mac
+                  Connection transitions and observatory changes from the
+                  receiver
                 </p>
               </div>
               <Choice
@@ -2214,8 +2225,8 @@ export default function Home() {
                 </p>
                 {!d.settings_editable && (
                   <p>
-                    To edit station details, open http://127.0.0.1:8787 on your
-                    Mac.
+                    To edit station details, access http://127.0.0.1:8787
+                    locally on the receiver host or through an SSH tunnel.
                   </p>
                 )}
                 <Button type="submit" disabled={saving || !d.settings_editable}>
@@ -2230,7 +2241,7 @@ export default function Home() {
             </Panel>
             <Panel
               title="How your observatory operates"
-              note="One receiver. Live data collected on your Mac."
+              note="One receiver. Live data collected on your receiver host."
             >
               <Rows
                 rows={[
@@ -2248,14 +2259,16 @@ export default function Home() {
                   ['Frame counts', 'Since observatory collector start'],
                   [
                     'Background operation',
-                    'While you are logged in; display can be locked',
+                    d.host?.platform === 'Linux'
+                      ? 'Starts automatically at boot; no login required'
+                      : 'While you are logged in; display can be locked',
                   ],
                 ]}
               />
               <p className="panel-explanation">
-                Keep your Mac awake and the receiver connected. Other radio
-                frequencies need a second receiver or an intentional pause of
-                the airplane feed.
+                Keep the receiver host powered and the antenna connected. Other
+                radio frequencies need a second receiver or an intentional pause
+                of the airplane feed.
               </p>
             </Panel>
           </div>

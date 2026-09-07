@@ -1,0 +1,24 @@
+[Unit]
+Description=Antenna Observatory receiver collector
+After=network-online.target readsb.service
+Wants=network-online.target readsb.service
+RequiresMountsFor=/mnt/antenna-storage /var/lib/antenna-observatory
+ConditionPathIsMountPoint=/mnt/antenna-storage
+
+[Service]
+User=readsb
+Group=nogroup
+SupplementaryGroups=systemd-journal
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/etc/antenna-observatory.env
+ExecStart=/usr/bin/python3 /opt/antenna-observatory/server/observatory.py --port 8787
+Restart=always
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/antenna-observatory
+
+[Install]
+WantedBy=multi-user.target

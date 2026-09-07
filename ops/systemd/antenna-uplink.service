@@ -1,0 +1,21 @@
+[Unit]
+Description=Antenna Observatory telemetry uploader
+After=network-online.target antenna-observatory.service
+Wants=network-online.target antenna-observatory.service
+RequiresMountsFor=/mnt/antenna-storage /var/lib/antenna-observatory
+ConditionPathIsMountPoint=/mnt/antenna-storage
+
+[Service]
+User=readsb
+Group=nogroup
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/etc/antenna-observatory.env
+ExecStart=/usr/bin/python3 /opt/antenna-observatory/ops/telemetry-uplink.py --remote ${ANTENNA_REMOTE_INGEST} --token-file /var/lib/antenna-observatory/relay-token
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

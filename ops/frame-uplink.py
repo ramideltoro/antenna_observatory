@@ -26,8 +26,10 @@ def sha256_file(path):
     return digest.hexdigest()
 
 class FrameUploader:
-    def __init__(self,remote,token,dump_dir,spool_dir,status_file,zstd):
+    def __init__(self,remote,token,dump_dir,spool_dir,status_file,zstd,free_disk_reserve=FREE_DISK_RESERVE):
         self.remote=remote.rstrip('/');self.token=token;self.dump=Path(dump_dir);self.spool=Path(spool_dir);self.status_file=Path(status_file);self.zstd=zstd
+        self.free_disk_reserve=free_disk_reserve
+        if free_disk_reserve<0: raise ValueError('Disk reserve must be nonnegative')
         self.quarantine=self.spool/'quarantine';self.context=ssl.create_default_context()
         for path in (self.dump,self.spool,self.quarantine):path.mkdir(parents=True,exist_ok=True,mode=0o700)
         previous=read_json(self.status_file,{})
@@ -58,7 +60,7 @@ class FrameUploader:
         return sorted((path for path in self.spool.glob('*.zst') if path.is_file()),key=lambda path:(path.stat().st_mtime_ns,path.name))
     def enforce_disk_reserve(self):
         pending=self.pending()
-        while pending and shutil.disk_usage(self.spool).free<FREE_DISK_RESERVE:
+        while pending and shutil.disk_usage(self.spool).free<self.free_disk_reserve:
             lost=pending.pop(0);lost.unlink();self.gaps+=1;self.last_error='Dropped the oldest unacknowledged Beast batch because disk space is critically low.'
     def upload_oldest(self):
         pending=self.pending()
@@ -82,11 +84,13 @@ class FrameUploader:
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--remote',required=True);parser.add_argument('--token-file',required=True)
     parser.add_argument('--dump-dir',required=True);parser.add_argument('--spool-dir',required=True);parser.add_argument('--status-file',required=True)
-    parser.add_argument('--zstd',default=shutil.which('zstd'));args=parser.parse_args()
+    parser.add_argument('--zstd',default=shutil.which('zstd'))
+    parser.add_argument('--free-disk-reserve-mb',type=int,default=FREE_DISK_RESERVE//(1024*1024));args=parser.parse_args()
+    if args.free_disk_reserve_mb<0: parser.error('Disk reserve must be nonnegative')
     token=Path(args.token_file).read_text().strip()
     if len(token)<32:raise SystemExit('Invalid relay token')
     if not args.zstd or not Path(args.zstd).is_file():raise SystemExit('zstd is required for Beast batch validation')
-    uploader=FrameUploader(args.remote,token,args.dump_dir,args.spool_dir,args.status_file,args.zstd);failures=0
+    uploader=FrameUploader(args.remote,token,args.dump_dir,args.spool_dir,args.status_file,args.zstd,args.free_disk_reserve_mb*1024*1024);failures=0
     while True:
         try:
             uploader.claim_completed();uploader.enforce_disk_reserve();uploaded=uploader.upload_oldest();uploader.status()

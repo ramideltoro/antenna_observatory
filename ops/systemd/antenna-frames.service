@@ -1,0 +1,23 @@
+[Unit]
+Description=Antenna Observatory durable frame uploader
+After=network-online.target readsb.service
+Wants=network-online.target readsb.service
+RequiresMountsFor=/mnt/antenna-storage /var/lib/antenna-observatory
+ConditionPathIsMountPoint=/mnt/antenna-storage
+
+[Service]
+User=readsb
+Group=nogroup
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/etc/antenna-observatory.env
+ExecStart=/usr/bin/python3 /opt/antenna-observatory/ops/frame-uplink.py --remote ${ANTENNA_REMOTE_BEAST} --token-file /var/lib/antenna-observatory/relay-token --dump-dir /var/lib/antenna-observatory/beast-dump --spool-dir /var/lib/antenna-observatory/beast-spool --status-file /var/lib/antenna-observatory/frame-uplink-status.json --zstd /usr/bin/zstd --free-disk-reserve-mb ${ANTENNA_DISK_RESERVE_MB}
+Restart=always
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/antenna-observatory
+
+[Install]
+WantedBy=multi-user.target

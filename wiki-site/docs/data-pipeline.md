@@ -5,7 +5,7 @@
 ```mermaid
 sequenceDiagram
     participant Radio as 1090 MHz radio
-    participant Readsb as readsb on Mac
+    participant Readsb as readsb on receiver host
     participant Collector as Local collector
     participant Uploader as HTTPS uploader
     participant Frames as Frame uploader
@@ -43,13 +43,13 @@ sequenceDiagram
 
 ## Collector inputs
 
-| Source                   | Contents                                                 | Typical update   |
-| ------------------------ | -------------------------------------------------------- | ---------------- |
-| `aircraft.json`          | Aircraft fields, seen ages, positions, message totals    | 1 second         |
-| `stats.json`             | Decoder counters, gain, signal, noise, samples, CPU work | About 10 seconds |
-| `receiver.json`          | Decoder identity and runtime metadata                    | Decoder-managed  |
-| Beast TCP 30905          | Raw framed Mode S messages with signal byte              | Continuous       |
-| macOS process inspection | PID, state, memory, CPU, established sockets             | 10 seconds       |
+| Source                             | Contents                                                 | Typical update   |
+| ---------------------------------- | -------------------------------------------------------- | ---------------- |
+| `aircraft.json`                    | Aircraft fields, seen ages, positions, message totals    | 1 second         |
+| `stats.json`                       | Decoder counters, gain, signal, noise, samples, CPU work | About 10 seconds |
+| `receiver.json`                    | Decoder identity and runtime metadata                    | Decoder-managed  |
+| Beast TCP 30005 (Pi) / 30905 (Mac) | Raw framed Mode S messages with signal byte              | Continuous       |
+| Host process inspection            | PID, state, memory, CPU, established sockets             | 10 seconds       |
 
 The collector calculates current message rate from consecutive aircraft snapshots. It classifies recent Beast frames, measures per-family rate over the trailing 60 seconds, and preserves `null` when a measurement is unavailable. It never fills telemetry gaps with invented values.
 

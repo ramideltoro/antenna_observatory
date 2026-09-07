@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Antenna Observatory collector, public dashboard relay, and website server."""
-import argparse, collections, csv, gzip, hashlib, hmac, io, ipaddress, json, math, os, re, secrets, shutil, socket, sqlite3, subprocess, threading, time
+import argparse, collections, csv, gzip, hashlib, hmac, io, ipaddress, json, math, os, platform, re, secrets, shutil, socket, sqlite3, subprocess, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
@@ -8,8 +8,12 @@ from urllib.parse import urlparse, parse_qs
 import intelligence
 
 ROOT = Path(__file__).resolve().parent.parent
-STATE = Path(os.environ.get('ANTENNA_STATE_DIR', Path.home() / 'Library/Application Support/AntennaObservatory/state'))
-DATA = STATE / 'readsb'
+LINUX = platform.system() == 'Linux'
+STATE = Path(os.environ.get('ANTENNA_STATE_DIR', '/var/lib/antenna-observatory' if LINUX else Path.home() / 'Library/Application Support/AntennaObservatory/state'))
+DATA = Path(os.environ.get('ANTENNA_READSB_DIR', '/run/readsb' if LINUX else STATE / 'readsb'))
+BEAST_PORT = int(os.environ.get('ANTENNA_BEAST_PORT', '30005' if LINUX else '30905'))
+READSB_SERVICE = os.environ.get('ANTENNA_READSB_SERVICE', 'readsb.service')
+FEED_SERVICE = os.environ.get('ANTENNA_FEED_SERVICE', 'airplanes-feed.service')
 CONFIG = STATE / 'settings.json'
 REMOTE_CONFIG = STATE / 'remote-access.json'
 DB = STATE / 'observatory.sqlite'
@@ -214,7 +218,7 @@ class Observatory:
     def beast_loop(self):
         while not self.stop.is_set():
             try:
-                with socket.create_connection(('127.0.0.1',30905),timeout=3) as sock:
+                with socket.create_connection(('127.0.0.1',BEAST_PORT),timeout=3) as sock:
                     sock.settimeout(3); parser=BeastParser()
                     with self.lock: self.beast_connected=True
                     self.event('success','Local signal stream connected')
@@ -238,25 +242,49 @@ class Observatory:
             if was: self.event('warning','Local signal stream disconnected; reconnecting')
             self.stop.wait(3)
     def inspect_host(self):
-        text=command(['/bin/launchctl','print',f'gui/{os.getuid()}/{LABEL}'])
-        pid_match=re.search(r'^\s*pid = (\d+)',text,re.M); state_match=re.search(r'^\s*state = (\S+)',text,re.M)
-        pid=int(pid_match.group(1)) if pid_match else None
-        established=[]; cpu=None; memory=None
-        if pid:
-            connections=command(['/usr/sbin/lsof','-nP','-a','-p',str(pid),'-iTCP','-sTCP:ESTABLISHED','-Fn'])
-            established=[line[1:] for line in connections.splitlines() if line.startswith('n') and '->' in line]
-            vals=command(['/bin/ps','-p',str(pid),'-o','%cpu=,rss=']).split()
-            if len(vals)==2:
-                try: cpu=float(vals[0]); memory=round(int(vals[1])/1024,1)
-                except ValueError: pass
-        connected=any(re.search(r'->[^ ]+:30004(?: |$)',s) for s in established)
+        if LINUX:
+            props=dict(line.split('=',1) for line in command(['systemctl','show',READSB_SERVICE,'--property=MainPID,ActiveState']).splitlines() if '=' in line)
+            pid=int(props.get('MainPID','0')) or None
+            state=props.get('ActiveState','unknown')
+            established=[]; cpu=None; memory=None
+            if pid:
+                vals=command(['ps','-p',str(pid),'-o','%cpu=,rss=']).split()
+                if len(vals)==2:
+                    try: cpu=float(vals[0]); memory=round(int(vals[1])/1024,1)
+                    except ValueError: pass
+            for line in command(['ss','-Htn','state','established']).splitlines():
+                fields=line.split()
+                if len(fields)<4: continue
+                local,peer=fields[2:4]
+                try:
+                    address,port=peer.rsplit(':',1)
+                    external=not ipaddress.ip_address(address.strip('[]')).is_loopback
+                except ValueError: continue
+                if external and port in ('30004','64004'): established.append(local+'->'+peer)
+            connected=bool(established) and command(['systemctl','is-active',FEED_SERVICE]).strip()=='active'
+            mlat_configured=command(['systemctl','is-enabled','airplanes-mlat.service']).strip()=='enabled'
+        else:
+            text=command(['/bin/launchctl','print',f'gui/{os.getuid()}/{LABEL}'])
+            pid_match=re.search(r'^\s*pid = (\d+)',text,re.M); state_match=re.search(r'^\s*state = (\S+)',text,re.M)
+            pid=int(pid_match.group(1)) if pid_match else None
+            established=[]; cpu=None; memory=None
+            if pid:
+                connections=command(['/usr/sbin/lsof','-nP','-a','-p',str(pid),'-iTCP','-sTCP:ESTABLISHED','-Fn'])
+                established=[line[1:] for line in connections.splitlines() if line.startswith('n') and '->' in line]
+                vals=command(['/bin/ps','-p',str(pid),'-o','%cpu=,rss=']).split()
+                if len(vals)==2:
+                    try: cpu=float(vals[0]); memory=round(int(vals[1])/1024,1)
+                    except ValueError: pass
+            connected=any(re.search(r'->[^ ]+:30004(?: |$)',s) for s in established)
+            state=state_match.group(1) if state_match else 'not loaded'
+            mlat_configured=False
         with self.lock:
             previous_pid=self.host.get('pid')
             if previous_pid and pid and previous_pid!=pid:
                 self.event('warning',f'Decoder process restarted (PID {previous_pid} → {pid}); TCP feed '+('connected' if connected else 'reconnecting'))
             if self.feed_connected is not None and connected!=self.feed_connected: self.event('success' if connected else 'warning','Airplanes.live TCP connection restored' if connected else 'Airplanes.live TCP connection unavailable')
             self.feed_connected=connected
-            self.host={'pid':pid,'state':state_match.group(1) if state_match else 'not loaded','cpu_percent':cpu,'memory_mb':memory,'feed_connected':connected,'connections':established,'checked_at':time.time()}
+            self.host={'pid':pid,'state':state,'cpu_percent':cpu,'memory_mb':memory,'feed_connected':connected,'connections':established,'checked_at':time.time(),'platform':platform.system(),'mlat_configured':mlat_configured,'beast_port':BEAST_PORT}
     def collect_loop(self):
         while not self.stop.is_set():
             try: self.collect()
@@ -325,7 +353,7 @@ class Observatory:
               'recent_frames':list(self.recent),'events':list(reversed(self.events))[:100], 'host':self.host,'beast_connected':self.beast_connected,
               'receiver':receiver,'stats':stats,'raw_aircraft':raw,'frame_pipeline':frame_pipeline,'spectrum':spectrum,
               'maintenance_entries':intelligence.list_maintenance(self.db)['entries'],
-              'hardware':{'model':DEVICE_MODEL,'serial':DEVICE_SERIAL,'tuner':'Rafael Micro R820T','frequency_mhz':1090,'sample_rate_msps':2.4,'feeder_id':FEEDER_ID,'mlat_configured':False,'modeac_enabled':True}}
+              'hardware':{'model':DEVICE_MODEL,'serial':DEVICE_SERIAL,'tuner':'Rafael Micro R820T','frequency_mhz':1090,'sample_rate_msps':2.4,'feeder_id':FEEDER_ID,'mlat_configured':self.host.get('mlat_configured',False),'modeac_enabled':True}}
             intelligence.enrich_snapshot(self.db,self.snap)
             new_alerts={alert['code'] for alert in self.snap['smart_alerts']}
             for alert in self.snap['smart_alerts']:
@@ -366,6 +394,8 @@ class Observatory:
             points.append(p)
         return {'points':points,'started':first,'retention_days':7,'interval_seconds':10,'hours':hours}
     def logs(self):
+        if LINUX:
+            return command(['journalctl','-u',READSB_SERVICE,'-n','150','--no-pager','-o','short-iso']).splitlines()
         try:
             with LOG.open('rb') as f:
                 f.seek(0,2); f.seek(max(0,f.tell()-32768)); data=f.read().decode('utf-8','replace')
@@ -373,7 +403,7 @@ class Observatory:
         except OSError: return []
 
 class RelayObservatory:
-    """Stores telemetry and durable Beast batches pushed by the Mac."""
+    """Stores telemetry and durable Beast batches pushed by the receiver host."""
     def __init__(self):
         STATE.mkdir(parents=True,exist_ok=True);BEAST_BATCHES.mkdir(exist_ok=True)
         self.lock=threading.RLock();self.stop=threading.Event();self.wake=threading.Event();self.started=time.time();self.last_persist=0;self.last_cleanup=0
@@ -675,7 +705,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(403, {'error': 'HTTPS required'})
         if path=='/api/maintenance':
             if not self.local_loopback():
-                return self.respond(403,{'error':'Maintenance can only be changed from the local dashboard on this Mac.'})
+                return self.respond(403,{'error':'Maintenance can only be changed from the local dashboard on the receiver host.'})
             try:
                 length=int(self.headers.get('Content-Length','0'))
                 if not 0<length<=8192 or self.headers.get('Content-Type','').split(';')[0]!='application/json': raise ValueError('Invalid maintenance request')
@@ -692,7 +722,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.respond(200,result)
             except (ValueError,TypeError,KeyError) as error: return self.respond(400,{'error':str(error)})
         if not self.local_loopback():
-            return self.respond(403,{'error':'Station settings can only be changed from the local dashboard on this Mac.'})
+            return self.respond(403,{'error':'Station settings can only be changed from the local dashboard on the receiver host.'})
         if path!='/api/settings': return self.respond(404,{'error':'Unknown endpoint'})
         try:
             length=int(self.headers.get('Content-Length','0'))
