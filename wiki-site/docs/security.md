@@ -6,7 +6,7 @@
 flowchart LR
     Anonymous[Anonymous internet] -->|HTTPS| Edge[Cloudflare]
     Edge -->|Tunnel| Reads[Public dashboard and read APIs]
-    Mac[Trusted Mac] -->|Bearer token| Ingest[Ingest boundary]
+    Mac[Trusted Raspberry Pi] -->|Bearer token| Ingest[Ingest boundary]
     Ingest --> Relay[Relay state]
     Actions[GitHub Actions] -->|Restricted SSH key| Releases[Release directory]
     Actions -->|Repository deploy key| Wiki[Wiki repository]
@@ -16,7 +16,7 @@ flowchart LR
 
 Static assets, React paths, live telemetry, history, logs, exports, inspector data, and health data are public by design. The server still validates the public hostname and serves through a loopback-only Cloudflare Tunnel target. `/login` is retained only as a compatibility redirect to `/`; no password or browser session is required.
 
-The two write paths have narrower boundaries. `/api/ingest` accepts only the private relay bearer token shared with the Mac uploader. `/api/settings` accepts only loopback requests with a matching local origin, so internet visitors cannot change station metadata.
+Write paths have narrower boundaries. `/api/ingest` and `/api/ingest/beast/{sha256}` accept only the private relay bearer token shared with the Pi uploader. `/api/settings` and `/api/maintenance` accept only loopback requests with a matching local origin, so internet visitors cannot change station metadata.
 
 ## Request validation
 
@@ -29,19 +29,19 @@ The two write paths have narrower boundaries. `/api/ingest` accepts only the pri
 
 ## Secret locations
 
-| Secret                      | Storage                       | Repository exposure |
-| --------------------------- | ----------------------------- | ------------------- |
-| Relay bearer token          | Mode-0600 file on Mac and VPS | None                |
-| Cloudflare tunnel token     | Mode-0600 VPS state file      | None                |
-| VPS deployment private key  | GitHub Actions secret         | None                |
-| Wiki deployment private key | GitHub Actions secret         | None                |
-| Receiver feed UUID          | Private rendered LaunchAgent  | Placeholder only    |
+| Secret                      | Storage                        | Repository exposure |
+| --------------------------- | ------------------------------ | ------------------- |
+| Relay bearer token          | Mode-0600 file on Pi and VPS   | None                |
+| Cloudflare tunnel token     | Mode-0600 VPS state file       | None                |
+| VPS deployment private key  | GitHub Actions secret          | None                |
+| Wiki deployment private key | GitHub Actions secret          | None                |
+| Receiver feed UUID          | Private receiver configuration | Placeholder only    |
 
 CI runs both a purpose-built public-source boundary check and Gitleaks over complete Git history. Dependency review blocks vulnerable or disallowed new dependencies, production dependency auditing rejects high-severity advisories, and CodeQL runs extended JavaScript/TypeScript and Python queries.
 
 ## Exposure limits
 
-The Cloudflare Tunnel reaches a loopback-only relay. No inbound application port needs to be opened on the VPS. The Mac makes outbound connections to the relay and airplanes.live; it accepts the observatory and Beast endpoints only on loopback.
+The Cloudflare Tunnel reaches a loopback-only relay. No inbound application port needs to be opened on the VPS. The Pi makes outbound connections to the relay and airplanes.live; it accepts the observatory and Beast endpoints only on loopback.
 
 ## Security response
 

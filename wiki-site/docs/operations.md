@@ -1,107 +1,100 @@
 # Operations runbook
 
-## Normal service chain
+## Current service chain
+
+The Raspberry Pi owns the USB radio and runs all receiver services. The public relay and Cloudflare Tunnel remain on the VPS. The old Mac jobs are disabled; no Mac login or keepawake service is needed.
 
 ```mermaid
 flowchart LR
-    USB[USB receiver] --> R[readsb]
-    R --> AL[airplanes.live]
-    R --> C[collector]
-    R --> F[frame dump and spool]
-    C --> U[uploader]
-    U --> V[remote relay]
-    F --> V
-    T[Cloudflare tunnel] --> V
-    V --> B[browser]
+    USB[USB receiver] --> R[readsb on Pi]
+    R --> AF[airplanes-feed] --> AL[airplanes.live]
+    R --> MLAT[airplanes-mlat]
+    R --> C[antenna-observatory]
+    R --> D[(USB Beast dump)]
+    C --> U[antenna-uplink] --> V[Remote relay]
+    D --> F[antenna-frames] --> V
+    T[VPS Cloudflare Tunnel] --> V
+    V --> B[Public browser]
 ```
 
-Check from left to right. A downstream failure does not always affect an upstream service: the dashboard uplink can fail while airplanes.live continues receiving directly from readsb.
+A portal deployment does not restart the Pi decoder or its independent airplanes.live feed.
 
-## Mac service checks
+## Pi service checks
 
-```bash
-for label in \
-  local.airplanes-live.readsb \
-  local.antenna-observatory.web \
-  local.antenna-observatory.uplink \
-  local.antenna-observatory.frames \
-  local.antenna-observatory.keepawake
-do
-  launchctl print "gui/$(id -u)/$label" | grep -E 'state =|pid =|last exit code'
-done
+Run these commands on the Pi:
+
+```sh
+systemctl is-active readsb airplanes-feed airplanes-mlat antenna-observatory antenna-uplink antenna-frames
+systemctl is-enabled readsb airplanes-feed airplanes-mlat antenna-observatory antenna-uplink antenna-frames
+findmnt /mnt/antenna-storage
+df -h / /var/lib/antenna-observatory
+lsusb
 ```
 
-`state = running` or an active PID indicates the job is loaded. `KeepAlive` restarts an unexpected exit after the configured throttle interval.
+All six services should be active and enabled. The storage mount should resolve to the USB ext4 volume. A quiet sky can produce few aircraft even while the services are healthy.
 
-## Logs
+## Logs and restarts
 
-| Component                           | macOS log                                       |
-| ----------------------------------- | ----------------------------------------------- |
-| readsb and airplanes.live connector | `~/Library/Logs/airplanes-live.log`             |
-| Local web collector                 | `~/Library/Logs/antenna-observatory.log`        |
-| Remote telemetry uploader           | `~/Library/Logs/antenna-observatory-uplink.log` |
-| Durable frame uploader              | `~/Library/Logs/antenna-observatory-frames.log` |
-| Old Mac tunnel rollback service     | `~/Library/Logs/antenna-observatory-tunnel.log` |
-
-On Linux, the unprivileged supervisors write relay and tunnel logs under `~/.local/state/antenna-observatory/`.
-
-The Feed view reports the frame pipeline state, pending batches, spool bytes, oldest pending age, last capture/upload/process times, failed batches, and recorded gaps. During a network outage, pending batches and oldest age should rise while the direct airplanes.live connection remains independent. After recovery, they should return to zero.
-
-## Restart a Mac job
-
-Use `kickstart` for a routine restart:
-
-```bash
-launchctl kickstart -k "gui/$(id -u)/local.airplanes-live.readsb"
+```sh
+journalctl -u readsb -u airplanes-feed -u airplanes-mlat -n 50 --no-pager
+journalctl -u antenna-observatory -u antenna-uplink -u antenna-frames -n 50 --no-pager
+sudo systemctl restart antenna-uplink
 ```
 
-Use the same command with another label for the collector, uploader, or keep-awake job. Avoid loading two decoder jobs because only one can claim the USB device.
+Restart only the component that needs recovery. Restarting `readsb` briefly interrupts reception; restarting an uploader does not. Linux receiver diagnostics use systemd, process statistics, external sockets, and journald.
 
-## Deployments and rollback
+Remote relay and tunnel supervisors write logs under `~/.local/state/antenna-observatory/` on the VPS. Those are distinct from the Pi's systemd services.
 
-Production releases are immutable directories named by the full Git commit. The `current` symlink changes atomically after extraction and validation. The deployment script restarts only the relay, checks its loopback dashboard, and restores the previous symlink if health does not recover.
+The Feed view reports pending batches, last capture/upload/process times, failures, and gaps. During an upload outage, the USB backlog grows. After reconnection it drains through acknowledged uploads. A general network outage can also interrupt airplanes.live; a relay-only outage need not.
 
-The five newest releases are retained. To inspect the active target:
+## USB storage
 
-```bash
-ssh antenna-observatory 'readlink "$HOME/antenna-observatory/current"'
+The formatted 32 GB drive is labeled `ANTENNA_DATA` and mounted by UUID at `/mnt/antenna-storage`. The state symlink `/var/lib/antenna-observatory` points into that drive. It holds the collector database, settings, private relay token, frame dumps and retry spool. Live readsb JSON stays in `/run/readsb`.
+
+The drive provided about 28 GB free after formatting. The uploader reserves 2 GiB; if free space drops below the reserve it removes the oldest unacknowledged batches and records gaps. The remote relay retains the detailed archive for 72 hours and aggregate history for seven days.
+
+Keep the drive connected. Unit mount dependencies and mount-point conditions prevent fallback writes to the system card. Before intentionally removing it, stop the receiver and Observatory services, then unmount the volume.
+
+## Private settings and maintenance
+
+From another computer, open an SSH tunnel:
+
+```sh
+ssh -L 8788:127.0.0.1:8787 USER@PI_HOST
 ```
+
+Open `http://127.0.0.1:8788` to edit station settings or maintenance annotations. Those writes remain restricted to a local connection. The public portal is read-only. Changing dashboard coordinates does not reconfigure MLAT; keep its antenna position consistent with the decoder configuration.
+
+Record receiver moves, cable changes, upgrades, and outages in Maintenance. MLAT currently uses an estimated antenna location and elevation; verify precise coordinates when available.
 
 ## State and backup
 
-Back up the remote state directory separately from releases. It contains:
+Back up Pi and VPS state independently. Use SQLite's online backup API or stop the relevant service before copying a database; do not copy only the main SQLite file while ignoring an active WAL. Protect token files and backups. Code releases must not contain state or credentials.
 
-- relay and tunnel token files;
-- the SQLite history database and WAL files;
-- latest accepted relay snapshot and bounded log tail;
-- compressed Beast batches awaiting or completing 72-hour retention;
-- content-addressed batch manifests and per-frame indexes;
-- public-origin configuration.
+The migration preserved 25,194 local samples, retained the remote history and archive, and left the old Mac files available for rollback. Do not run the Mac and Pi telemetry uploaders for the same station at once.
 
-Stop or quiesce the relay before making a raw SQLite filesystem copy, or use SQLite’s online backup command. Protect backups with the same care as production state.
+## Deployments and rollback
+
+Canonical source and documentation live in the main repository. After protected-main CI succeeds, the release workflow deploys the VPS application and synchronizes the wiki repository. GitHub Pages then builds and publishes the wiki. See [deployment](deployment.md).
+
+VPS releases use commit-named directories and an atomic `current` symlink, retaining five releases. A failed local health check restores the previous release. Pi application files live in `/opt/antenna-observatory`; the VPS release workflow does not automatically update that Pi copy. Follow [Pi setup](pi-setup.md) for receiver installation and rollback.
 
 ## Routine maintenance
 
-| Frequency          | Check                                                              |
-| ------------------ | ------------------------------------------------------------------ |
-| Daily              | Dashboard freshness and airplanes.live feed state                  |
-| Daily              | Frame pipeline backlog, failures, gaps, and last processed time    |
-| Weekly             | Decoder log for repeated restarts, USB loss, or reconnection loops |
-| Weekly             | Dependabot and CodeQL results                                      |
-| Monthly            | Range trend, strong-signal percentage, disk use, retained releases |
-| After macOS update | Homebrew paths, LaunchAgent state, USB access, sleep behavior      |
-| After antenna move | Position, coax connection, signal/noise trend, maximum range       |
+| Frequency          | Check                                                               |
+| ------------------ | ------------------------------------------------------------------- |
+| Daily              | Fresh telemetry, airplanes.live feed, frame backlog and failures    |
+| Weekly             | USB disconnects, decoder restarts, free storage and security checks |
+| Monthly            | Range and signal trends; protected state backups                    |
+| After Pi OS update | USB detection, mounted drive, all six services and public data      |
+| After antenna move | Decoder, dashboard and MLAT position; signal/noise and range        |
 
-Record antenna moves, cable changes, receiver replacements, software upgrades, and incidents in the dashboard’s **Maintenance** view. This makes a later range or noise change interpretable.
+A full reboot was used to verify automatic storage mounting and service recovery during migration.
 
 ## Optional spectrum receiver
 
-The spectrum waterfall deliberately refuses to use the serial number reserved for readsb. Connect and assign a unique serial to a second RTL-SDR, then run:
+The primary receiver is dedicated to 1090 MHz. A simultaneous spectrum waterfall requires a separate RTL-SDR. The bundled sidecar retains Homebrew-specific executable defaults and is not enabled on the Pi; port and configure it for Linux before use. Never assign the primary SDR to a competing receiver process.
 
-```bash
-python3 "$HOME/Library/Application Support/AntennaObservatory/app/ops/spectrum-sidecar.py" \
-  --device SECOND_RECEIVER_SERIAL \
-  --protected-device YOUR_READSB_SERIAL
-```
+## Legacy Mac operations
 
-The sidecar writes a bounded 80-line waterfall to the observatory state directory. If the second receiver or `rtl_power` is unavailable, it retries without touching readsb. Do not configure the primary receiver serial: the sidecar fails closed to protect the airplanes.live feed.
+The [legacy Mac setup](mac-setup.md) documents LaunchAgents and keepawake behavior for rollback. Those jobs are disabled in the active installation. Leave the obsolete Mac public tunnel disabled; the VPS tunnel serves the public hostname.

@@ -1,14 +1,14 @@
 # Design decisions
 
-## ADR-001: Decode on the Mac
+## ADR-001: Decode on the physically attached receiver host
 
-**Decision:** Keep RTL-SDR ownership and readsb decoding on the Mac physically attached to the receiver.
+**Decision:** Keep RTL-SDR ownership and readsb decoding on the physically attached receiver host. This was originally the Mac; the active host is now the Raspberry Pi (ADR-009).
 
 **Reason:** Raw 2.4 MS/s IQ transport would use far more bandwidth, add latency, and make USB recovery dependent on a remote network. Compact decoded telemetry is sufficient for the dashboard.
 
 ## ADR-002: Feed airplanes.live directly
 
-**Decision:** readsb sends BeastReduce+ directly from the Mac to airplanes.live.
+**Decision:** The receiver feeds airplanes.live independently of the dashboard relay. On the Pi, the dedicated `airplanes-feed` service consumes local readsb output and sends BeastReduce+ to airplanes.live.
 
 **Reason:** The community feed remains independent of the dashboard relay. A website deployment or relay outage cannot interrupt a healthy receiver-to-feed path.
 
@@ -47,3 +47,15 @@
 **Decision:** Build in CI, upload a tested archive, use commit-named directories, and atomically switch a symlink.
 
 **Reason:** Production never rebuilds unreviewed dependencies, rollback is fast, and credentials and history remain separate from code.
+
+## ADR-009: Move receiver services to Raspberry Pi
+
+**Decision:** Run readsb, airplanes.live feed and MLAT, the Observatory collector, and both uploaders as Pi systemd services. Keep the public relay and historical archive on the existing VPS. Disable the old Mac producer after verifying cutover.
+
+**Reason:** Reception and uploads must continue without the Mac being awake or logged in. Reboot testing verified startup and recovery. The independent public relay retains existing history and access.
+
+## ADR-010: Store local history and frame backlog on USB
+
+**Decision:** Use the formatted 32 GB ext4 thumb drive for local state, mount it by UUID, and require the actual mount in systemd. Reserve 2 GiB of free space for the uploader.
+
+**Reason:** Keep database and archive writes off the small system card. Explicit mount dependencies prevent fallback writes when the drive is absent. Completed batches remain queued until acknowledged, subject to the documented emergency disk reserve.

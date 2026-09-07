@@ -1,6 +1,6 @@
 # Architecture
 
-The system separates radio decoding, transport, presentation, and documentation. The receiver host (Raspberry Pi or Mac) remains the source of truth for live RF data; the Linux relay is the source of truth for remotely visible telemetry history.
+The system separates radio decoding, transport, presentation, and documentation. The Raspberry Pi receiver host remains the source of truth for live RF data; the Linux relay is the source of truth for remotely visible telemetry history.
 
 ## System context
 
@@ -22,22 +22,26 @@ C4Context
 
 ```mermaid
 flowchart TB
-    subgraph Home[Mac receiver station]
+    subgraph Home[Raspberry Pi receiver station]
       Ant[Antenna] --> SDR[RTL-SDR USB]
       SDR --> Readsb[readsb]
       SDR2[Optional second RTL-SDR] --> Spectrum[Spectrum sidecar]
       Spectrum --> Collector
       Readsb --> JSON[JSON files]
-      Readsb --> Beast[Loopback Beast port 30905]
+      Readsb --> Beast[Loopback Beast port 30005]
       Readsb --> Dump[Two-minute zstd Beast files]
       JSON --> Collector[Observatory collector]
       Beast --> Collector
-      Awake[caffeinate LaunchAgent] -. keeps awake .-> Readsb
+      Storage[(USB ext4 data volume)] --- Dump
+      Storage --- Collector
+      Boot[systemd at boot] -. restarts .-> Readsb
       Collector --> Uplink[Telemetry uploader]
       Dump --> FrameUplink[Durable frame uploader]
     end
 
-    Readsb -->|TCP 30004| AL[airplanes.live]
+    Readsb --> Feed[airplanes-feed service]
+    Feed -->|TCP 30004| AL[airplanes.live]
+    Readsb --> MLAT[airplanes-mlat service]
     Uplink -->|HTTPS bearer token| Ingest[Relay /api/ingest]
     FrameUplink -->|Idempotent HTTPS PUT| BatchIngest[Relay /api/ingest/beast]
 
@@ -61,12 +65,13 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-    subgraph launchd[macOS user LaunchAgents]
-      R[local.airplanes-live.readsb]
-      W[local.antenna-observatory.web]
-      U[local.antenna-observatory.uplink]
-      F[local.antenna-observatory.frames]
-      K[local.antenna-observatory.keepawake]
+    subgraph systemd[Pi systemd services]
+      R[readsb]
+      W[antenna-observatory]
+      U[antenna-uplink]
+      F[antenna-frames]
+      AF[airplanes-feed]
+      AM[airplanes-mlat]
     end
     subgraph linux[Linux user processes]
       SR[relay supervisor] --> RP[relay process]
@@ -74,7 +79,8 @@ flowchart LR
     end
     R --> W --> U --> RP
     R --> F --> RP
-    K -. prevents idle sleep .-> R
+    R --> AF
+    R --> AM
     TP --> RP
 ```
 
@@ -82,7 +88,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    subgraph T1[Trusted Mac]
+    subgraph T1[Trusted Raspberry Pi]
       USB[USB receiver]
       COL[Collector]
       TOKEN1[Relay token file]
@@ -201,4 +207,4 @@ flowchart LR
 
 ## Raspberry Pi deployment
 
-The Pi replaces the Mac receiver, collector, and both uploaders with systemd services. USB storage holds local history and frame backlog, while the remote relay retains the public history and archive. See [Raspberry Pi setup](pi-setup.md) for migration, startup dependencies, diagnostics, and rollback.
+The Pi replaced the Mac receiver, collector, and both uploaders with systemd services. The Mac jobs are disabled and their files are retained for rollback. USB storage holds local history and frame backlog, while the remote relay retains the public history and archive. See [Raspberry Pi setup](pi-setup.md) for migration, startup dependencies, diagnostics, and rollback.

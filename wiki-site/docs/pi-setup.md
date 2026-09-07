@@ -1,6 +1,12 @@
 # Raspberry Pi receiver setup
 
-The receiver pipeline can run on a Raspberry Pi with Debian or Raspberry Pi OS and systemd. The existing remote relay, public hostname, history database, and Cloudflare Tunnel remain on the remote server. The Pi uploads live telemetry every two seconds and completed Beast batches every two minutes. No Mac login or awake session is needed.
+The active receiver pipeline runs on a Raspberry Pi with Debian or Raspberry Pi OS and systemd. The existing remote relay, public hostname, history database, and Cloudflare Tunnel remain on the remote server. The Pi uploads live telemetry every two seconds and completed Beast batches every two minutes. No Mac login or awake session is needed.
+
+## Installed storage and migration
+
+The station uses a 32 GB thumb drive reformatted as a single ext4 volume labeled `ANTENNA_DATA`. It mounts by UUID at `/mnt/antenna-storage`; `/var/lib/antenna-observatory` points into that volume. Approximately 28 GB was available after formatting. The collector database, settings, upload credential and frame spool live there, with a 2 GiB upload reserve.
+
+The migration preserved 25,194 local history samples and the remote history and archive. The old Mac jobs were disabled. A full Pi reboot verified automatic mounting, all six services, fresh public telemetry and processed frame batches with zero recorded gaps or failures at verification. Keep both the radio and storage drive connected.
 
 ## Prerequisites
 

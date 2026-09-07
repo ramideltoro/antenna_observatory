@@ -11,13 +11,15 @@ sequenceDiagram
     participant Frames as Frame uploader
     participant Relay as Remote relay
     participant Browser as Dashboard browser
+    participant Feed as Pi airplanes-feed
     participant AL as airplanes.live
 
     Radio->>Readsb: IQ samples at 2.4 MS/s
-    Readsb->>AL: BeastReduce+ frames
+    Readsb->>Feed: Beast frames over loopback
+    Feed->>AL: BeastReduce+ frames
     Readsb->>Readsb: Rotate zstd Beast dump every two minutes
     Readsb->>Collector: aircraft.json, stats.json, receiver.json
-    Readsb->>Collector: Beast frames on 127.0.0.1:30905
+    Readsb->>Collector: Beast frames on 127.0.0.1:30005
     loop Every second
       Collector->>Collector: Classify frames and compute live snapshot
     end
@@ -94,7 +96,7 @@ The relay rejects missing collections, non-finite timestamps, oversized requests
 
 ## Complete decoded-frame archive
 
-`readsb --dump-beast` writes every accepted Mode A/C, Mode S, and ADS-B frame with receiver ticks, signal byte, and synthetic wall-clock markers. The frame uploader never touches the SDR or changes the direct airplanes.live connector. It validates completed Zstandard files, moves them into a restart-safe spool, and uploads them oldest-first with content-addressed identities.
+`readsb --dump-beast` writes every accepted Mode A/C, Mode S, and ADS-B frame with receiver ticks, signal byte, and synthetic wall-clock markers. The frame uploader never touches the SDR or changes the independent airplanes.live feeder. It validates completed Zstandard files, moves them into a restart-safe spool, and uploads them oldest-first with content-addressed identities.
 
 The relay validates each compressed batch before durable acknowledgement, then a background worker indexes its frames transactionally. Duplicate PUT requests are successful no-ops. Processed batches and frame rows expire after 72 hours; aggregate dashboard samples retain their existing seven-day window.
 
@@ -113,3 +115,7 @@ stateDiagram-v2
 Charts downsample long ranges to at most roughly 480 plotted points. Buckets containing stale data or gaps over 30 seconds retain a gap in reception-dependent series.
 
 Track replay changes resolution with the requested range: ten seconds for one hour, twenty seconds for six hours, one minute for one day, and five minutes for seven days. Coverage uses 72 five-degree sectors. Encounter sessions increment only after a target has been absent for more than 15 minutes.
+
+## Receiver storage and startup
+
+The active receiver is the Raspberry Pi. `/run/readsb` contains live decoder JSON in memory; `/var/lib/antenna-observatory` points to the USB data volume for the database, settings, relay token, Beast dumps, and retry spool. Units require the actual USB mount before starting. No Mac login or keepawake process is needed. The uploader reserves 2 GiB locally; detailed 72-hour retention remains on the remote relay.

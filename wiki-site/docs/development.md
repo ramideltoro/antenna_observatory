@@ -7,7 +7,7 @@ app/                 React application and amber responsive theme
 components/          Charts and reusable UI components
 lib/                 Shared telemetry types and helpers
 server/              Python collector, relay, request boundaries, and tests
-ops/                 LaunchAgent templates and deployment utilities
+ops/                 systemd units, legacy LaunchAgent templates, deployment utilities
 scripts/             CI source-safety and bundle-budget checks
 wiki-site/           Canonical MkDocs project documentation
 .github/              CI, security, release, and maintenance automation
