@@ -1755,7 +1755,11 @@ export default function Home() {
               <Stat
                 label="Service uptime"
                 value={age(Number(d.now) - Number(d.decoder_started))}
-                note="Restarts automatically after login"
+                note={
+                  d.host?.platform === 'Linux'
+                    ? 'Starts automatically at boot'
+                    : 'Restarts automatically after login'
+                }
               />
             </section>
             <Panel
@@ -1804,7 +1808,12 @@ export default function Home() {
                         {d.hardware?.feeder_id}
                       </code>,
                     ],
-                    ['Automatic start', 'At user login'],
+                    [
+                      'Automatic start',
+                      d.host?.platform === 'Linux'
+                        ? 'At system boot'
+                        : 'At user login',
+                    ],
                     [
                       'Local frame stream',
                       d.beast_connected

@@ -22,7 +22,7 @@ The frame uploader accepts `--free-disk-reserve-mb`. The Pi example reserves 204
 1. Copy `ops/systemd/antenna-observatory.env.example` to `/etc/antenna-observatory.env`. Set the receiver serial, current airplanes.live feeder UUID, remote ingest URLs, and disk reserve. These values belong only in the local configuration.
 2. Copy the existing relay token into `/var/lib/antenna-observatory/relay-token`, owned by `readsb`, mode `0600`.
 3. Migrate `settings.json` and use SQLite's online backup API to migrate `observatory.sqlite`, preserving maintenance entries. The collector's station coordinates should agree with the decoder/MLAT configuration. Preserve the remote database in place.
-4. Add `--modeac --dump-beast=/var/lib/antenna-observatory/beast-dump,120,1` to readsb's decoder options. Create that directory owned by `readsb`. Keep the existing airplanes.live ports and connectors.
+4. Add `--modeac --dump-beast=/var/lib/antenna-observatory/beast-dump,120,1` to readsb's decoder options. Create that directory owned by `readsb`. Add `--net-bind-address 127.0.0.1` to the network options; the collector and feeder consume the decoder locally. Keep the existing airplanes.live ports and connectors.
 5. Install the three units from `ops/systemd/` into `/etc/systemd/system/`, reload systemd, and restart readsb.
 6. Start `antenna-observatory.service` and verify `http://127.0.0.1:8787/api/snapshot` locally. Disable the old Mac telemetry uploader before enabling `antenna-uplink.service`, so two hosts cannot overwrite the same station snapshot.
 7. Enable `antenna-frames.service` and wait for a complete two-minute batch. Confirm the remote archive has processed it with zero failed batches.
