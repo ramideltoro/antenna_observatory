@@ -196,6 +196,8 @@ export interface Snapshot {
     feed_connected?: boolean;
     connections?: string[];
     checked_at?: number;
+    platform?: string;
+    beast_port?: number;
   };
   beast_connected: boolean;
   receiver: { version?: string };

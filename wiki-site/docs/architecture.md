@@ -1,6 +1,6 @@
 # Architecture
 
-The system separates radio decoding, transport, presentation, and documentation. The Mac remains the source of truth for live RF data; the Linux relay is the source of truth for remotely visible telemetry history.
+The system separates radio decoding, transport, presentation, and documentation. The receiver host (Raspberry Pi or Mac) remains the source of truth for live RF data; the Linux relay is the source of truth for remotely visible telemetry history.
 
 ## System context
 
@@ -198,3 +198,7 @@ flowchart LR
     D --> UI
     L --> UI
 ```
+
+## Raspberry Pi deployment
+
+The Pi replaces the Mac receiver, collector, and both uploaders with systemd services. USB storage holds local history and frame backlog, while the remote relay retains the public history and archive. See [Raspberry Pi setup](pi-setup.md) for migration, startup dependencies, diagnostics, and rollback.

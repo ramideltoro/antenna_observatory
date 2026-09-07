@@ -1031,7 +1031,7 @@ function MaintenanceView({ editable }: { editable: boolean }) {
           note={
             editable
               ? 'Authored locally, synchronized securely'
-              : 'Editing is available on the Mac'
+              : 'Editing is available on the receiver host'
           }
         >
           {editable ? (
@@ -1079,9 +1079,10 @@ function MaintenanceView({ editable }: { editable: boolean }) {
           ) : (
             <div className="feature-empty maintenance-readonly">
               <p>
-                Open <strong>http://127.0.0.1:8787</strong> on the receiver Mac
-                to add or delete an annotation. The protected telemetry uplink
-                will mirror it here automatically.
+                Open <strong>http://127.0.0.1:8787</strong> through a local
+                connection or SSH tunnel to the receiver to add or delete an
+                annotation. The protected telemetry uplink will mirror it here
+                automatically.
               </p>
             </div>
           )}

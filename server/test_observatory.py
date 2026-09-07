@@ -73,6 +73,26 @@ class ProtocolTests(unittest.TestCase):
         self.assertNotIn('caches.open', worker)
 
 
+class LinuxHostTests(unittest.TestCase):
+    def test_separate_feeder_process_and_loopback_exclusion(self):
+        obs=app.Observatory.__new__(app.Observatory)
+        obs.lock=threading.RLock();obs.host={};obs.feed_connected=None
+        def output(args):
+            if args[:2]==['systemctl','show']: return 'MainPID=123\nActiveState=active\n'
+            if args[0]=='ps': return '12.5 20480'
+            if args[0]=='ss': return '0 0 127.0.0.1:40000 127.0.0.1:30004\n0 0 192.0.2.1:40001 198.51.100.2:30004\n'
+            if args[:2]==['systemctl','is-active']: return 'active\n'
+            if args[:2]==['systemctl','is-enabled']: return 'enabled\n'
+            raise AssertionError(args)
+        with patch.object(app,'LINUX',True),patch.object(app,'command',side_effect=output): obs.inspect_host()
+        self.assertTrue(obs.host['feed_connected']);self.assertTrue(obs.host['mlat_configured'])
+        self.assertEqual(obs.host['pid'],123);self.assertEqual(obs.host['memory_mb'],20)
+        self.assertEqual(obs.host['connections'],['192.0.2.1:40001->198.51.100.2:30004'])
+        obs.feed_connected=None
+        with patch.object(app,'LINUX',True),patch.object(app,'command',side_effect=lambda args: '0 0 127.0.0.1:40000 127.0.0.1:30004' if args[0]=='ss' else output(args)):
+            obs.inspect_host()
+        self.assertFalse(obs.host['feed_connected'])
+
 class TelemetryTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(); root = Path(self.temp.name)
@@ -228,6 +248,17 @@ class RelayTests(unittest.TestCase):
         with patch.object(frame_uplink.shutil,'disk_usage',return_value=SimpleNamespace(free=0)):
             uploader.enforce_disk_reserve()
         self.assertEqual(uploader.pending(),[]);self.assertEqual(uploader.gaps,2)
+
+    def test_small_receiver_disk_reserve_preserves_uploadable_batches(self):
+        spool=self.root/'small-spool'
+        uploader=frame_uplink.FrameUploader('https://example.invalid','t'*48,self.root/'small-dump',spool,self.root/'small-status.json',shutil.which('zstd'),512*1024*1024)
+        (spool/('1-'+'a'*64+'.zst')).write_bytes(b'batch')
+        with patch.object(frame_uplink.shutil,'disk_usage',return_value=SimpleNamespace(free=1024*1024*1024)):
+            uploader.enforce_disk_reserve()
+        self.assertEqual(len(uploader.pending()),1);self.assertEqual(uploader.gaps,0)
+        with patch.object(frame_uplink.shutil,'disk_usage',return_value=SimpleNamespace(free=256*1024*1024)):
+            uploader.enforce_disk_reserve()
+        self.assertEqual(uploader.pending(),[]);self.assertEqual(uploader.gaps,1)
 
     def test_processed_retention_does_not_delete_failed_batches(self):
         compressed=zstd_compress(beast_dump());digest=hashlib.sha256(compressed).hexdigest();self.assertEqual(self.put_beast(compressed)[0],200)
