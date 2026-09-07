@@ -1,6 +1,6 @@
 # Mac receiver setup
 
-This page records the complete receiver setup used by the project. Commands target an Apple Silicon Mac with Homebrew under `/opt/homebrew`; Intel Homebrew paths may differ.
+This is the legacy Mac setup, retained for rollback and alternative installations. The active station now uses the [Raspberry Pi setup](pi-setup.md). Do not enable the Mac uploaders while the Pi is publishing telemetry for the same station. Commands target an Apple Silicon Mac with Homebrew under `/opt/homebrew`; Intel Homebrew paths may differ.
 
 ## 1. Assemble and place the antenna
 

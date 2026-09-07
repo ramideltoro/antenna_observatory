@@ -32,13 +32,13 @@ The transparent menu button stays fixed at the upper-left corner. It opens every
 
 ## Read the live state
 
-| State                | Meaning                                                             | First action                               |
-| -------------------- | ------------------------------------------------------------------- | ------------------------------------------ |
-| Receiving            | Fresh readsb data reached the remote relay.                         | No action needed.                          |
-| Receiver stale       | The relay has data, but no new snapshot arrived recently.           | Check that the Mac is awake and online.    |
-| Collector offline    | The browser cannot reach the API.                                   | Check the public domain and relay service. |
-| Feed disconnected    | Local reception works, but the airplanes.live TCP socket is absent. | Inspect the readsb log and network.        |
-| Waiting for receiver | No usable snapshot has arrived since service start.                 | Check USB ownership and readsb.            |
+| State                | Meaning                                                             | First action                                        |
+| -------------------- | ------------------------------------------------------------------- | --------------------------------------------------- |
+| Receiving            | Fresh readsb data reached the remote relay.                         | No action needed.                                   |
+| Receiver stale       | The relay has data, but no new snapshot arrived recently.           | Check Pi power, USB storage, network, and services. |
+| Collector offline    | The browser cannot reach the API.                                   | Check the public domain and relay service.          |
+| Feed disconnected    | Local reception works, but the airplanes.live TCP socket is absent. | Inspect the readsb log and network.                 |
+| Waiting for receiver | No usable snapshot has arrived since service start.                 | Check USB ownership and readsb.                     |
 
 ## Mobile behavior
 

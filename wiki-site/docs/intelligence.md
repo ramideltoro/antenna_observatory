@@ -148,7 +148,7 @@ flowchart TD
 
 ## Maintenance annotations
 
-Use annotations to explain a measurable change. Useful entries include antenna relocation, element extension, coax or adapter replacement, gain changes, receiver replacement, macOS or readsb updates, weather damage, and outages. Changes are accepted only from the loopback dashboard on the receiver Mac, validated, and mirrored to the hosted timeline through the protected telemetry uplink.
+Use annotations to explain a measurable change. Useful entries include antenna relocation, element extension, coax or adapter replacement, gain changes, receiver replacement, receiver OS or readsb updates, weather damage, and outages. Changes are accepted only from the loopback dashboard on the receiver host, validated, and mirrored to the hosted timeline through the protected telemetry uplink.
 
 ## Progressive web app
 

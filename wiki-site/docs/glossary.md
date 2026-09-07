@@ -22,4 +22,6 @@
 | TIS-B        | Traffic Information Service–Broadcast; ground rebroadcast of surveillance targets                                 |
 | TC           | ADS-B extended-squitter type code                                                                                 |
 | UAT          | Universal Access Transceiver on 978 MHz; not received by this 1090 MHz configuration                              |
-| Uplink       | Protected two-second HTTPS transfer from the Mac collector to the remote relay                                    |
+| Uplink       | Protected two-second HTTPS transfer from the Pi collector to the remote relay                                     |
+
+The active receiver uses **systemd**, Linux’s service manager, to start and recover services at boot. LaunchAgents apply only to the legacy Mac setup. The **USB data volume** is the ext4 thumb drive holding local history and unacknowledged frame batches.

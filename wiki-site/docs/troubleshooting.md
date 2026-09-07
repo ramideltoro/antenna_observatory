@@ -5,75 +5,90 @@
 ```mermaid
 flowchart TD
     Start[Dashboard is stale] --> Public{Dashboard opens?}
-    Public -->|No| Tunnel[Check cloudflared and DNS]
-    Public -->|Yes| Uplink{Uploader running?}
-    Uplink -->|No| UL[Restart uplink and inspect its log]
+    Public -->|No| Tunnel[Check VPS tunnel and DNS]
+    Public -->|Yes| Storage{Pi USB data volume mounted?}
+    Storage -->|No| Mount[Reconnect drive and inspect mount unit]
+    Storage -->|Yes| Uplink{antenna-uplink active?}
+    Uplink -->|No| UL[Inspect systemd journal and restart uploader]
     Uplink -->|Yes| Local{Local snapshot fresh?}
-    Local -->|No| Readsb{readsb running?}
-    Local -->|Yes| Token[Check relay token match and network]
-    Readsb -->|No| USB{Receiver visible to rtl_test?}
-    Readsb -->|Yes| JSON[Check JSON path and Beast port 30905]
-    USB -->|No| Cable[Reconnect USB and stop competing SDR apps]
-    USB -->|Yes| Restart[Kickstart readsb]
+    Local -->|Yes| Token[Check network and relay token]
+    Local -->|No| Readsb{readsb active?}
+    Readsb -->|Yes| JSON[Check /run/readsb and loopback port 30005]
+    Readsb -->|No| USB[Check lsusb and decoder journal]
 ```
 
-## No aircraft appear
+## No aircraft or receiver missing
 
-1. Extend the metal antenna and keep it vertical.
-2. Move it near a window with open sky.
-3. Confirm readsb owns the receiver and its JSON files are changing.
-4. Check local time and the current amount of air traffic.
-5. Inspect mean signal, noise, message rate, and samples lost together.
+Check on the Pi:
 
-A small indoor antenna can show nearby aircraft without seeing distant traffic. Range depends strongly on line of sight and surrounding buildings.
-
-## Device busy or no supported devices
-
-Another program owns the USB tuner. Stop `rtl_test`, dump1090, Skyglow, SDR++, or another readsb instance. Then restart the production service:
-
-```bash
-launchctl kickstart -k "gui/$(id -u)/local.airplanes-live.readsb"
+```sh
+lsusb
+systemctl status readsb --no-pager
+journalctl -u readsb -n 40 --no-pager
 ```
 
-If needed, unplug the SDR for ten seconds, reconnect it, and check `rtl_test -s 2400000` before loading readsb again.
+`No supported devices found` can mean the radio is physically disconnected. Firmly reconnect it or try another Pi USB port. `Device busy` can mean another SDR application owns the tuner; stop that competing program before restarting `readsb`. Do not run `rtl_test` while readsb owns the radio.
 
-## Feed stopped after locking the Mac
+Keep the antenna vertical near a window or open sky. Reception depends on surrounding buildings, antenna placement and current traffic. Inspect message rate, signal/noise and lost samples together.
 
-Check the keep-awake job and AC power:
+## USB storage missing after startup
 
-```bash
-launchctl print "gui/$(id -u)/local.antenna-observatory.keepawake" \
-  | grep -E 'state =|pid =|last exit code'
-pmset -g assertions | grep -A4 -i caffeinate
+```sh
+lsblk -o NAME,SIZE,FSTYPE,LABEL,UUID,MOUNTPOINTS
+findmnt /mnt/antenna-storage
+systemctl status antenna-observatory antenna-frames readsb --no-pager
 ```
 
-The screen may lock and turn off. The Mac itself must remain awake, logged in, connected to the network, and attached to power for `caffeinate -s` to prevent system sleep.
+The required data volume is `ANTENNA_DATA`, an ext4 partition mounted by UUID. Reconnect it and check that `/etc/fstab` uses its current UUID. Mount it before restarting dependent services. Do not remove mount requirements to force startup onto the small system card, and do not format a drive merely because its mount failed.
 
-## Dashboard opens but telemetry is stale
+## Portal opens but telemetry is stale
 
-Readsb may still be feeding airplanes.live while the observatory path is broken. Check in this order:
+Check, in order:
 
-1. local collector snapshot at `http://127.0.0.1:8787`;
-2. `local.antenna-observatory.uplink` LaunchAgent;
-3. uploader log for HTTP 401, DNS, TLS, or timeout errors;
-4. remote relay log for rejected or stale ingests.
+1. Pi power, network and data-volume mount.
+2. `readsb` and the changing JSON files in `/run/readsb`.
+3. The collector snapshot at `http://127.0.0.1:8787/api/snapshot`, requested on the Pi.
+4. `antenna-uplink` and its journal.
+5. The VPS relay and tunnel logs.
 
-An HTTP 401 from `/api/ingest` means the Mac and relay token files do not match. Replace them through a protected channel; never paste the token into a repository or issue.
+```sh
+curl -fsS http://127.0.0.1:8787/api/snapshot
+journalctl -u antenna-observatory -u antenna-uplink -n 40 --no-pager
+sudo systemctl restart antenna-uplink
+```
 
-An HTTP 404 from the decoded-frame uploader after moving the dashboard to the VPS usually means the obsolete Mac Cloudflare Tunnel LaunchAgent is still loaded. The Mac and VPS then act as connectors for the same hostname, and a Beast upload can reach the local collector instead of the relay. Run the current local installer to retire `local.antenna-observatory.tunnel`; only the VPS tunnel should serve the public hostname.
+An HTTP 401 indicates a relay credential mismatch. Restore the matching token through a private channel; never paste it into an issue. DNS, TLS and timeout errors indicate transport problems. The uploader retries automatically.
+
+Only the VPS tunnel should serve the public hostname. An obsolete Mac tunnel can route ingest to the wrong service and cause HTTP 404 responses. The Mac receiver and uploader jobs are intentionally disabled after migration.
+
+## Frame uploads lag or show gaps
+
+Inspect `antenna-frames`, the Feed view, and free space on `/var/lib/antenna-observatory`. Captures rotate every two minutes, so the latest upload is not expected to update every second. Finished batches are validated and removed locally only after a matching acknowledgement.
+
+A network outage queues data on USB. Below the 2 GiB reserve, oldest unacknowledged files are dropped and counted as gaps. Invalid older batches are quarantined. Investigate failures before deleting a backlog. The remote relay separately reports pending and failed processing batches.
+
+## MLAT is configured but has no results
+
+Configured means the MLAT service is enabled; it does not prove current synchronization. Inspect the service's peer and receiver statistics:
+
+```sh
+journalctl -u airplanes-mlat -n 40 --no-pager
+```
+
+MLAT needs shared aircraft observations with other receivers and an accurate antenna location. Few aircraft can mean few peers or results. The installed antenna coordinates and elevation are estimates; check those before treating low synchronization as a software fault.
+
+## Private station edits are unavailable
+
+The public portal intentionally disallows station changes. Use the SSH tunnel in the [operations runbook](operations.md) and open the forwarded loopback dashboard. Maintenance entries synchronize through the protected telemetry uploader.
 
 ## Public domain does not open
 
-Check DNS resolution, Cloudflare Tunnel status, the Linux tunnel supervisor, and local relay readiness. The application should remain bound to loopback; do not expose port 8787 publicly as a workaround.
+Check DNS, the VPS Cloudflare Tunnel, the relay supervisor and its local health endpoint. Do not expose port 8787 publicly as a workaround.
 
-## A legacy bookmark opens `/login`
+## Signal strength and chart gaps
 
-The compatibility route redirects to the public dashboard. If an older page appears, clear Safari’s cached website data for the domain and reload `https://antenna.ramideltoro.com/`.
+If more than roughly 10% of accepted messages exceed −3 dBFS, compare reception while testing a lower fixed gain. Automatic gain is the installed default. Charts intentionally show gaps for stale data or long sample interruptions; they do not invent observations during outages.
 
-## Signal seems too strong
+## Legacy Mac troubleshooting
 
-If more than about 10% of accepted messages exceed −3 dBFS, strong nearby transmissions may overload the tuner. Compare aircraft count and valid message rate while testing a lower fixed gain. Automatic gain is the safe default for the installed setup.
-
-## Charts have gaps
-
-Gaps are intentional when data is stale, a history bucket includes missing telemetry, or consecutive samples are more than 30 seconds apart. The interface does not interpolate across a receiver outage.
+Mac sleep, login and Homebrew issues apply only to the [legacy setup](mac-setup.md). The active Pi pipeline should keep working when the Mac is off. A legacy `/login` bookmark redirects to the public dashboard.

@@ -47,7 +47,7 @@ nav:
   - Start here:
       - Access and use: getting-started.md
       - Raspberry Pi receiver setup: pi-setup.md
-      - Mac receiver setup: mac-setup.md
+      - Legacy Mac setup: mac-setup.md
       - Signal guide: signals.md
   - System:
       - Architecture: architecture.md

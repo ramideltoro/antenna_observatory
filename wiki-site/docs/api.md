@@ -14,15 +14,15 @@ The browser uses same-origin HTTP endpoints. Read endpoints are public and requi
 | GET    | `/api/encounters?limit=250`  | Public                        | Seven-day aircraft encounter rollups                                |
 | GET    | `/api/reports?days=7`        | Public                        | Daily reception and availability scorecards                         |
 | GET    | `/api/lab?hours=24`          | Public                        | Signal, altitude, and range distributions with baselines            |
-| GET    | `/api/maintenance`           | Public                        | Maintenance annotations synchronized from the Mac                   |
+| GET    | `/api/maintenance`           | Public                        | Maintenance annotations synchronized from the Pi                    |
 | POST   | `/api/maintenance`           | Local loopback + local origin | Add or delete a maintenance annotation                              |
 | GET    | `/api/spectrum`              | Public                        | Optional second-SDR waterfall state                                 |
 | GET    | `/api/logs`                  | Public                        | Bounded decoder log tail                                            |
 | GET    | `/api/export`                | Public                        | Aircraft snapshot as CSV                                            |
 | GET    | `/api/health`                | Public                        | Application health and collector start time                         |
 | POST   | `/api/settings`              | Local loopback + local origin | Validate and update station name and coordinates                    |
-| GET    | `/api/uplink`                | Local loopback bearer token   | Snapshot envelope for the Mac uploader                              |
-| POST   | `/api/ingest`                | Relay bearer token            | Accept a validated Mac telemetry envelope                           |
+| GET    | `/api/uplink`                | Local loopback bearer token   | Snapshot envelope for the Pi uploader                               |
+| POST   | `/api/ingest`                | Relay bearer token            | Accept a validated receiver telemetry envelope                      |
 | PUT    | `/api/ingest/beast/{sha256}` | Relay bearer token            | Durably accept an idempotent Zstandard Beast batch                  |
 
 ## Snapshot state
@@ -75,7 +75,7 @@ Unknown values are represented as JSON `null` or absent source fields. Consumers
 
 Beast uploads use `Content-Type: application/zstd`, have a 16 MiB compressed-body limit, and are safe to retry. Repeating an accepted hash returns success without inserting duplicate frames.
 
-Analytics ranges are clamped server-side. Replay returns no more than 25,000 compressed points, encounter queries return no more than 1,000 rows, and maintenance text has strict size and category validation. Maintenance changes are accepted only on the Mac's loopback dashboard and are mirrored to the hosted relay by the protected telemetry uplink.
+Analytics ranges are clamped server-side. Replay returns no more than 25,000 compressed points, encounter queries return no more than 1,000 rows, and maintenance text has strict size and category validation. Maintenance changes are accepted only on the Pi's loopback dashboard and are mirrored to the hosted relay by the protected telemetry uplink.
 
 ## Error behavior
 
